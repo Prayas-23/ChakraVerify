@@ -1,12 +1,957 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RecyVerify</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SatyaSetu — Evidence Verification</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+<style>
+  :root {
+    --bg: #eef1f5; --panel: #ffffff; --panel-2: #f8fafc; --ink: #0f172a; --ink-2: #334155; --muted: #64748b;
+    --line: #dde3ea; --line-2: #e9edf2; --brand: #0b2545; --brand-2: #13315c; --accent: #1d4ed8;
+    --red: #dc2626; --red-ink: #991b1b; --red-bg: #fef2f2; --red-line: #fecaca;
+    --amber: #f59e0b; --amber-ink: #92400e; --amber-bg: #fffbeb; --amber-line: #fde68a;
+    --green: #16a34a; --green-ink: #166534; --green-bg: #f0fdf4; --green-line: #bbf7d0;
+    --neutral: #9ca3af;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 14px; line-height: 1.5; }
+  button, select, input { font: inherit; }
+  .mono { font-family: var(--mono); }
+  [hidden] { display: none !important; }
+
+  /* Header */
+  .topbar { background: var(--brand); color: #e2e8f0; }
+  .topbar-inner { max-width: 1600px; margin: 0 auto; padding: 14px 20px 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; justify-content: space-between; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-mark { width: 36px; height: 36px; border-radius: 8px; background: #fff; color: var(--brand); display: grid; place-items: center; font-weight: 700; font-size: 18px; }
+  .brand-name { font-weight: 700; letter-spacing: .18em; font-size: 18px; color: #fff; }
+  .brand-sub { font-size: 12.5px; color: #b8c4d6; }
+  .principle { font-size: 13px; color: #dbe4f0; border-left: 3px solid #5b8def; padding-left: 10px; max-width: 420px; }
+  .pipeline { max-width: 1600px; margin: 0 auto; padding: 0 20px 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .pipe-step { font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 4px 10px; border-radius: 999px; border: 1px solid #2f4b74; color: #8fa3bf; }
+  .pipe-step.active { background: #fff; color: var(--brand); border-color: #fff; }
+  .pipe-step.done { color: #dbe4f0; border-color: #5b7aa6; }
+  .pipe-arrow { color: #5b7aa6; font-size: 12px; }
+
+  .advisory { background: #fff7e6; border-bottom: 1px solid #f3d9a4; }
+  .advisory-inner { max-width: 1600px; margin: 0 auto; padding: 8px 20px; display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; font-size: 13px; color: #6b4a0b; }
+  .advisory strong { letter-spacing: .04em; color: #4a3207; }
+
+  /* Layout */
+  .layout { max-width: 1600px; margin: 0 auto; padding: 16px 20px 8px; display: grid; gap: 16px;
+            grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
+            grid-template-areas: "input verdict" "input graph" "activity report";
+            grid-template-rows: auto 1fr auto; align-items: start; }
+  #panel-input { grid-area: input; } #panel-activity { grid-area: activity; } #panel-verdict { grid-area: verdict; }
+  #panel-graph { grid-area: graph; } #panel-report { grid-area: report; }
+  @media (max-width: 980px) {
+    .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "input" "verdict" "activity" "graph" "report"; padding: 12px; }
+    .topbar-inner, .pipeline, .advisory-inner { padding-left: 16px; padding-right: 16px; }
+  }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); min-width: 0; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line-2); }
+  .panel-title { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+  .panel-num { width: 22px; height: 22px; border-radius: 6px; background: var(--brand); color: #fff; display: grid; place-items: center; font-size: 12px; letter-spacing: 0; }
+  .panel-meta { font-size: 12px; color: var(--muted); }
+  .panel-body { padding: 14px 16px 16px; }
+  .empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
+
+  /* Input panel */
+  label.field { display: block; font-size: 12px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .06em; }
+  select.case-select { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); }
+  .case-meta { font-size: 12.5px; color: var(--muted); margin: 6px 0 12px; }
+  .doc-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
+  .doc { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
+  .doc-icon { width: 30px; height: 30px; border-radius: 6px; background: #e8eef7; color: var(--brand-2); display: grid; place-items: center; font-size: 10px; font-weight: 700; font-family: var(--mono); }
+  .doc-name { font-family: var(--mono); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .doc-type { font-size: 12px; color: var(--muted); }
+  .doc-type select { font-size: 12px; padding: 1px 4px; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
+  .doc-note { grid-column: 2 / 4; font-size: 11.5px; color: var(--muted); }
+  .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; border: 1px solid transparent; }
+  .chip-uploaded { background: #eef2ff; color: #3730a3; border-color: #c7d2fe; }
+  .chip-pending { background: #f1f5f9; color: var(--ink-2); border-color: var(--line); }
+  .chip-verified { background: var(--green-bg); color: var(--green-ink); border-color: var(--green-line); }
+  .chip-finding { background: var(--red-bg); color: var(--red-ink); border-color: var(--red-line); }
+  .chip-minor { background: var(--amber-bg); color: var(--amber-ink); border-color: var(--amber-line); }
+  .chip-na { background: #f8fafc; color: var(--muted); border-color: var(--line); }
+  .dropzone { display: block; border: 1.5px dashed #b8c4d6; border-radius: 8px; padding: 12px; text-align: center; font-size: 12.5px; color: var(--muted); cursor: pointer; background: #fbfcfe; margin-bottom: 12px; }
+  .dropzone:hover, .dropzone.drag { border-color: var(--accent); color: var(--accent); }
+  .dropzone input { display: none; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 8px; border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 7px 12px; cursor: pointer; font-weight: 600; font-size: 12.5px; }
+  .btn:hover { border-color: #b8c4d6; }
+  .btn-primary { width: 100%; padding: 11px 14px; background: var(--brand); border-color: var(--brand); color: #fff; font-size: 14px; letter-spacing: .06em; text-transform: uppercase; }
+  .btn-primary:hover { background: var(--brand-2); }
+  .btn-primary:disabled { opacity: .6; cursor: progress; }
+  .btn-x { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 0 4px; font-size: 16px; line-height: 1; }
+
+  /* Activity */
+  #panel-activity .panel-body { max-height: 900px; overflow-y: auto; padding-top: 8px; }
+  .events { list-style: none; margin: 0; padding: 0; }
+  .event { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line-2); animation: fadein .25s ease-out; }
+  @keyframes fadein { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .event { animation: none; } }
+  .ev-step { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-family: var(--mono); font-size: 11px; font-weight: 600; background: #eef2f7; color: var(--ink-2); border: 2px solid transparent; }
+  .ev-ok .ev-step { border-color: var(--green-line); }
+  .ev-warning .ev-step { background: var(--amber-bg); color: var(--amber-ink); border-color: var(--amber); }
+  .ev-alert .ev-step { background: var(--red-bg); color: var(--red-ink); border-color: var(--red); }
+  .ev-running .ev-step { border-color: #93c5fd; }
+  .ev-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+  .ev-agent { font-weight: 600; font-size: 13px; }
+  .ev-kind { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; background: #eef2f7; color: var(--ink-2); }
+  .k-engine .ev-kind { background: #e0e7ff; color: #3730a3; }
+  .k-explanation .ev-kind, .k-notice .ev-kind, .k-report .ev-kind { background: var(--brand); color: #fff; }
+  .k-safety .ev-kind { background: var(--amber-bg); color: var(--amber-ink); }
+  .ev-action { font-family: var(--mono); font-size: 11.5px; color: var(--accent); word-break: break-all; }
+  .ev-reason { font-size: 12px; color: var(--muted); }
+  .ev-summary { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; word-break: break-word; }
+  .ev-phase { margin: 10px 0 2px; font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+
+  /* Verdict panel */
+  .verdict-grid { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 16px 22px; align-items: center; }
+  @media (max-width: 720px) { .verdict-grid { grid-template-columns: 1fr 1fr; } .verdict-detail { grid-column: 1 / -1; } }
+  .verdict-badge { border-radius: 10px; padding: 12px 18px; min-width: 150px; text-align: center; border: 2px solid; }
+  .verdict-badge .vb-label { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; opacity: .85; }
+  .verdict-badge .vb-value { font-size: 26px; font-weight: 700; letter-spacing: .04em; line-height: 1.2; }
+  .v-low { background: var(--green-bg); color: var(--green-ink); border-color: var(--green); }
+  .v-review { background: var(--amber-bg); color: var(--amber-ink); border-color: var(--amber); }
+  .v-high { background: var(--red-bg); color: var(--red-ink); border-color: var(--red); }
+  .score-block .sb-value { font-family: var(--mono); font-size: 30px; font-weight: 600; line-height: 1.1; }
+  .score-block .sb-value small { font-size: 15px; color: var(--muted); }
+  .score-block .sb-band { font-size: 12px; color: var(--muted); }
+  .verdict-headline { font-weight: 700; font-size: 15px; }
+  .verdict-reason { font-size: 13px; color: var(--ink-2); }
+  .escalation { margin-top: 6px; font-size: 12.5px; padding: 6px 10px; border-radius: 6px; background: var(--red-bg); border: 1px solid var(--red-line); color: var(--red-ink); }
+  .recommendation { margin-top: 14px; padding: 10px 12px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line); font-size: 13px; }
+  .decision { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 10px 12px; border-radius: 8px; background: var(--brand); color: #fff; }
+  .decision strong { letter-spacing: .08em; font-size: 12.5px; }
+  .decision span { font-size: 12.5px; color: #cbd5e1; }
+  .intro h3 { margin: 0 0 6px; font-size: 16px; }
+  .intro p { margin: 0 0 10px; color: var(--ink-2); }
+  .checks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .checks-grid li { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); font-size: 12.5px; }
+  .checks-grid b { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--brand-2); }
+  .loading { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
+  .spinner { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #dbe3ee; border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-box { padding: 12px 14px; border-radius: 8px; background: var(--red-bg); border: 1px solid var(--red-line); color: var(--red-ink); }
+
+  /* Graph */
+  .graph-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 0; }
+  @media (max-width: 1200px) { .graph-wrap { grid-template-columns: minmax(0, 1fr); } }
+  #graph { height: 460px; background: #fbfcfe; border-right: 1px solid var(--line-2); }
+  @media (max-width: 980px) { #graph { height: 360px; border-right: 0; border-bottom: 1px solid var(--line-2); } }
+  .inspector { padding: 12px 14px; font-size: 12.5px; }
+  .inspector h4 { margin: 0 0 2px; font-size: 13.5px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .graph-fallback { padding: 14px 16px; }
+
+  /* Report */
+  .section { margin-bottom: 18px; }
+  .section:last-child { margin-bottom: 0; }
+  .section-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+  .src-tag { font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--muted); background: #f1f5f9; padding: 1px 8px; border-radius: 999px; }
+  .explanation { font-size: 14px; line-height: 1.6; padding: 12px 14px; border-left: 3px solid var(--brand); background: var(--panel-2); border-radius: 0 8px 8px 0; }
+  .fid { display: inline-block; font-family: var(--mono); font-weight: 600; font-size: 12px; padding: 1px 6px; border-radius: 5px; background: var(--brand); color: #fff; cursor: pointer; border: 0; line-height: 1.5; }
+  .fid.sev-critical, .fid.sev-major { background: var(--red); }
+  .fid.sev-minor { background: #d97706; }
+  .fid.sev-ok { background: var(--green); }
+  .fid:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .findings { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .findings th { text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  .findings td { padding: 9px 8px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+  .findings tr.is-ok td { color: var(--muted); }
+  .findings tr.selected td { background: #eff6ff; }
+  .findings .msg { color: var(--ink); }
+  .findings tr.is-ok .msg { color: var(--muted); }
+  .ev-list { margin: 4px 0 0; padding: 0; list-style: none; font-size: 11.5px; color: var(--muted); }
+  .ev-list li { display: inline; margin-right: 10px; }
+  .ev-list b { font-weight: 500; color: var(--ink-2); }
+  .ev-list .withheld { color: var(--red-ink); font-style: italic; }
+  .sev { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 1px 7px; border-radius: 4px; }
+  .sev-critical.sev, .sev-major.sev { background: var(--red-bg); color: var(--red-ink); border: 1px solid var(--red-line); }
+  .sev-minor.sev { background: var(--amber-bg); color: var(--amber-ink); border: 1px solid var(--amber-line); }
+  .sev-ok.sev { background: var(--green-bg); color: var(--green-ink); border: 1px solid var(--green-line); }
+  .table-scroll { overflow-x: auto; }
+  @media (max-width: 720px) { .findings .col-conf, .findings .col-doc { display: none; } }
+  .toggle { font-size: 12px; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; text-transform: none; letter-spacing: 0; font-weight: 500; }
+  details.box { border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
+  details.box > summary { cursor: pointer; padding: 9px 12px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+  details.box > div { padding: 0 12px 12px; }
+  .formula { font-family: var(--mono); font-size: 12px; background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; margin: 0 0 8px; white-space: pre-wrap; }
+  .breakdown { border-collapse: collapse; font-size: 12px; font-family: var(--mono); }
+  .breakdown td, .breakdown th { padding: 3px 12px 3px 0; text-align: left; }
+  .breakdown th { color: var(--muted); font-weight: 500; }
+  .notice-draft { border: 2px dashed var(--amber); border-radius: 8px; background: #fffdf7; }
+  .notice-banner { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; background: var(--amber-bg); border-bottom: 1px solid var(--amber-line); color: var(--amber-ink); font-weight: 700; font-size: 12.5px; letter-spacing: .04em; }
+  .notice-text { margin: 0; padding: 12px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-word; color: var(--ink); }
+  .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; font-size: 12.5px; margin: 0; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; }
+  .fingerprint { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .fp-hash { font-family: var(--mono); font-size: 13px; padding: 4px 8px; border-radius: 6px; background: #0f172a; color: #e2e8f0; }
+  .fp-full { font-family: var(--mono); font-size: 12px; word-break: break-all; margin-top: 8px; padding: 8px 10px; border-radius: 6px; background: #0f172a; color: #e2e8f0; }
+  .fp-note { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .page-foot { max-width: 1600px; margin: 0 auto; padding: 8px 20px 24px; font-size: 12.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: space-between; }
+  .page-foot strong { color: var(--ink-2); }
+</style>
 </head>
 <body>
-  <h1>RecyVerify</h1>
-  <p>E-waste EPR claim verification. Dashboard coming in Phase 5.</p>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">S</div>
+      <div>
+        <div class="brand-name">SATYASETU</div>
+        <div class="brand-sub">AI-powered evidence verification for e-waste &amp; EPR claims</div>
+      </div>
+    </div>
+    <div class="principle">Don't trust the claim. Verify the entire evidence chain.</div>
+  </div>
+  <nav class="pipeline" aria-label="Verification pipeline">
+    <span class="pipe-step active" data-step="evidence">Evidence</span><span class="pipe-arrow">→</span>
+    <span class="pipe-step" data-step="verification">Verification</span><span class="pipe-arrow">→</span>
+    <span class="pipe-step" data-step="explanation">Explanation</span><span class="pipe-arrow">→</span>
+    <span class="pipe-step" data-step="human">Human review</span>
+  </nav>
+</header>
+<div class="advisory" role="note">
+  <div class="advisory-inner">
+    <strong>FINAL DECISION: HUMAN COMPLIANCE OFFICER</strong>
+    <span>AI output is advisory. Review evidence before making a compliance decision.</span>
+  </div>
+</div>
+
+<main class="layout">
+  <section class="panel" id="panel-input" aria-labelledby="t-input">
+    <div class="panel-head"><h2 class="panel-title" id="t-input"><span class="panel-num">1</span>Claim &amp; evidence</h2><span class="panel-meta" id="mode-meta"></span></div>
+    <div class="panel-body">
+      <label class="field" for="case-select">Demo claim</label>
+      <select id="case-select" class="case-select" disabled><option>Loading demo claims…</option></select>
+      <div class="case-meta" id="case-meta"></div>
+      <label class="field">Evidence in this claim</label>
+      <ul class="doc-list" id="doc-list"></ul>
+      <label class="field">Add evidence files</label>
+      <label class="dropzone" id="dropzone">
+        <input type="file" id="file-input" multiple>
+        Drop files here or <u>browse</u> — certificate, invoice, weighbridge, transporter, GPS log, facility photo
+      </label>
+      <ul class="doc-list" id="upload-list"></ul>
+      <button class="btn btn-primary" id="verify-btn" disabled>Verify claim</button>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-activity" aria-labelledby="t-activity">
+    <div class="panel-head"><h2 class="panel-title" id="t-activity"><span class="panel-num">2</span>Live agent activity</h2><span class="panel-meta" id="activity-meta"></span></div>
+    <div class="panel-body" aria-live="polite">
+      <ol class="events" id="events"></ol>
+      <p class="empty" id="events-empty">Agent steps appear here as the investigation runs: evidence listing, document extraction, registry lookup, quantity, capacity, timeline and image checks, then explanation, notice and report.</p>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-verdict" aria-labelledby="t-verdict">
+    <div class="panel-head"><h2 class="panel-title" id="t-verdict"><span class="panel-num">4</span>Human review report</h2><span class="panel-meta" id="verdict-meta"></span></div>
+    <div class="panel-body" id="verdict-body"></div>
+  </section>
+
+  <section class="panel" id="panel-graph" aria-labelledby="t-graph">
+    <div class="panel-head">
+      <h2 class="panel-title" id="t-graph"><span class="panel-num">3</span>Evidence graph</h2>
+      <div class="legend"><span><i style="background:#dc2626"></i>Major / critical</span><span><i style="background:#f59e0b"></i>Minor</span><span><i style="background:#16a34a"></i>OK</span><span><i style="background:#9ca3af"></i>Not checked</span></div>
+    </div>
+    <div class="graph-wrap">
+      <div id="graph" role="img" aria-label="Evidence chain graph"></div>
+      <div class="inspector" id="inspector"><p class="empty">Run a verification, then click a node, a relationship or a finding ID to see the linked findings.</p></div>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-report" aria-labelledby="t-report">
+    <div class="panel-head"><h2 class="panel-title" id="t-report"><span class="panel-num">4</span>Findings &amp; evidence</h2><span class="panel-meta" id="report-meta"></span></div>
+    <div class="panel-body" id="report-body"><p class="empty">The report appears here after verification: explanation, findings with IDs, score breakdown, draft clarification notice and the report integrity fingerprint.</p></div>
+  </section>
+</main>
+
+<footer class="page-foot">
+  <span><strong>Recommendation only — final decision by compliance officer.</strong> SatyaSetu never approves or rejects a claim.</span>
+  <span>Scores and findings are computed by deterministic code; the AI explains and drafts only.</span>
+</footer>
+
+<!-- Pure view logic: backend JSON in, display data out. No DOM access, no scoring. -->
+<script id="satyasetu-core">
+(function (root) {
+  "use strict";
+
+  const VERDICTS = {
+    LOW: { cls: "v-low", label: "LOW", headline: "No material inconsistency detected" },
+    NEEDS_REVIEW: { cls: "v-review", label: "NEEDS REVIEW", headline: "Additional evidence review recommended" },
+    HIGH: { cls: "v-high", label: "HIGH", headline: "Material inconsistencies detected" },
+  };
+  const HUMAN_DECISION = "FINAL DECISION: HUMAN COMPLIANCE OFFICER";
+  const ADVISORY = "AI output is advisory. Review evidence before making a compliance decision.";
+  const DRAFT_LABEL = "DRAFT — Requires officer approval";
+  const WITHHELD = "[instruction-like text withheld — never displayed or executed]";
+  const HIDDEN_EVIDENCE_KEYS = ["excerpt"];
+  const REQUIRED_REPORT_KEYS = ["claim_id", "verdict", "score", "findings", "fingerprint_sha256"];
+
+  const DOC_LABELS = {
+    epr_certificate: "EPR certificate", invoice: "Invoice", weighbridge: "Weighbridge receipt",
+    transporter: "Transporter document", gps: "GPS / logistics log", photo: "Facility image",
+    facility: "Recycler / facility record", unknown: "Unclassified",
+  };
+  const SOURCE_BY_CHECK = {
+    registry: "Recycler registry", capacity: "Registry capacity vs. certificate", timeline: "GPS log vs. delivery/weighbridge times",
+    image: "Facility image", pattern: "Multiple independent sources", manipulation: "Document", quantity: "Document vs. weighbridge",
+  };
+  // Demo evidence file → backend graph node (and, where a node covers several checks, the checks that belong to the file).
+  const EVIDENCE_FILES = {
+    "epr_certificate.png": { type: "epr_certificate", node: "certificate" },
+    "invoice.png": { type: "invoice", node: "invoice" },
+    "weighbridge.png": { type: "weighbridge", node: "weighbridge" },
+    "transporter.png": { type: "transporter", node: "transporter" },
+    "gps.csv": { type: "gps", node: "gps" },
+    "photo.jpg": { type: "photo", node: "facility", checks: ["image"] },
+  };
+  const EXTRACTION_SOURCES = {
+    ground_truth: "Cached ground truth (DEMO_MODE)", llm: "LLM extraction, schema-validated",
+    "llm-cache": "Cached LLM extraction, schema-validated", unavailable: "Extraction unavailable",
+  };
+  const PLANNERS = {
+    scripted: "Deterministic planner (DEMO_MODE — no LLM calls)", llm: "LLM agent with tool calling",
+    "llm+scripted": "LLM agent, completed by the deterministic planner",
+  };
+  const WRITER_SOURCES = {
+    llm: "Written by LLM · validated against findings", "llm-cache": "Cached LLM text · validated against findings",
+    fallback: "Written by deterministic code", none: "",
+  };
+
+  function isReport(r) {
+    return !!r && typeof r === "object" && REQUIRED_REPORT_KEYS.every((k) => k in r) &&
+      Array.isArray(r.findings) && Object.prototype.hasOwnProperty.call(VERDICTS, r.verdict);
+  }
+
+  function secretsOf(r) {
+    const out = [];
+    if (!r || !Array.isArray(r.findings)) return out;
+    for (const f of r.findings) {
+      const ex = f && f.evidence && f.evidence.excerpt;
+      if (typeof ex === "string") {
+        for (const part of ex.split(" | ")) if (part.trim().length >= 8) out.push(part.trim());
+      }
+    }
+    return out;
+  }
+
+  function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+
+  function scrub(text, secrets) {
+    if (text === null || text === undefined) return "";
+    let t = String(text);
+    for (const s of secrets || []) t = t.replace(new RegExp(escapeRe(s), "gi"), WITHHELD);
+    return t;
+  }
+
+  function groupNumber(n) {
+    return Number.isInteger(n) && Math.abs(n) >= 1000 ? n.toLocaleString("en-US") : String(n);
+  }
+
+  function formatValue(key, v) {
+    if (v === null || v === undefined) return "—";
+    if (typeof v === "boolean") return v ? "yes" : "no";
+    if (Array.isArray(v)) return v.map((x) => formatValue("", x)).join(", ");
+    if (typeof v === "number") {
+      if (/_pct$/.test(key)) return v + "%";
+      if (/_kg(_per_day)?$/.test(key)) return groupNumber(v) + (key.endsWith("_per_day") ? " kg/day" : " kg");
+      if (/_km$/.test(key)) return v + " km";
+      if (/_min$/.test(key)) return v + " min";
+      return groupNumber(v);
+    }
+    if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v)) return v.slice(0, 16).replace("T", " ");
+    if (typeof v === "object") return JSON.stringify(v);
+    return String(v);
+  }
+
+  function docLabel(doc) { return doc ? (DOC_LABELS[doc] || String(doc)) : ""; }
+
+  function evidenceEntries(finding, secrets) {
+    const out = [];
+    for (const [k, v] of Object.entries((finding && finding.evidence) || {})) {
+      if (k === "document") continue;
+      if (HIDDEN_EVIDENCE_KEYS.includes(k)) { out.push({ key: k.replace(/_/g, " "), value: WITHHELD, withheld: true }); continue; }
+      out.push({ key: k.replace(/_/g, " "), value: scrub(formatValue(k, v), secrets), withheld: false });
+    }
+    return out;
+  }
+
+  function findingRows(r) {
+    if (!isReport(r)) return [];
+    const secrets = secretsOf(r);
+    return r.findings.map((f) => {
+      const doc = f.evidence && typeof f.evidence.document === "string" ? f.evidence.document : null;
+      return {
+        id: f.id, severity: f.severity, category: f.check, confidence: f.confidence,
+        confidenceText: f.confidence >= 1 ? "1.0 · direct" : f.confidence + " · inferred",
+        source: doc ? docLabel(doc) : (SOURCE_BY_CHECK[f.check] || ""),
+        message: scrub(f.message, secrets), evidence: evidenceEntries(f, secrets), isIssue: f.severity !== "ok",
+      };
+    });
+  }
+
+  function verdictView(r) {
+    if (!isReport(r)) return null;
+    const v = VERDICTS[r.verdict];
+    const escalatedBy = Array.isArray(r.escalated_by) ? r.escalated_by : [];
+    return {
+      verdict: r.verdict, cls: v.cls, label: v.label, headline: v.headline,
+      score: r.score, scoreText: r.score + " / 100", band: r.score_band || "", reason: r.verdict_reason || "",
+      escalated: escalatedBy.length > 0, escalatedBy: escalatedBy,
+      recommendation: r.recommendation || "", caseTitle: r.case_title || "", claimId: r.claim_id,
+    };
+  }
+
+  function humanReview(r) {
+    const verdict = r && r.verdict;
+    const needsDraft = (verdict === "NEEDS_REVIEW" || verdict === "HIGH") && !!(r && r.clarification_notice);
+    return { decision: HUMAN_DECISION, advisory: ADVISORY, draft: needsDraft ? DRAFT_LABEL : null };
+  }
+
+  function noticeView(r) {
+    if (!isReport(r) || !r.clarification_notice) return null;
+    return { label: DRAFT_LABEL, text: scrub(r.clarification_notice, secretsOf(r)), source: WRITER_SOURCES[r.notice_source] || "" };
+  }
+
+  function explanationView(r) {
+    if (!isReport(r)) return null;
+    const ids = new Set(r.findings.map((f) => f.id));
+    return { segments: splitIds(scrub(r.explanation, secretsOf(r)), ids), source: WRITER_SOURCES[r.explanation_source] || "" };
+  }
+
+  function fingerprintView(r) {
+    const fp = r && r.fingerprint_sha256;
+    if (typeof fp !== "string" || !/^[0-9a-f]{64}$/.test(fp)) return null;
+    return { full: fp, short: fp.slice(0, 12) + "…" + fp.slice(-8), generatedAt: (r && r.generated_at) || "" };
+  }
+
+  function breakdownView(r) {
+    if (!isReport(r)) return null;
+    return { rows: Array.isArray(r.score_breakdown) ? r.score_breakdown : [], formula: r.formula || "", policy: r.policy || "" };
+  }
+
+  function sourcesView(r) {
+    if (!isReport(r)) return null;
+    const docs = Object.entries(r.extraction_sources || {}).map(([doc, src]) => ({ doc: docLabel(doc), source: EXTRACTION_SOURCES[src] || src }));
+    return { docs: docs, planner: PLANNERS[r.planner] || r.planner || "", agentSummary: scrub(r.agent_summary, secretsOf(r)) };
+  }
+
+  function eventKind(e) {
+    const agent = (e && e.agent) || "";
+    if (agent === "Explanation Agent") return "explanation";
+    if (agent === "Notice Agent") return "notice";
+    if (agent === "Report Builder") return "report";
+    if (agent === "Risk Engine") return "engine";
+    if (agent.indexOf("Safety Net") === 0) return "safety";
+    if (agent === "Orchestrator" && e.status === "warning") return "planner";  // planner switch / step limit
+    if (e && (e.status === "alert" || e.status === "warning")) return "finding";
+    return "investigation";
+  }
+
+  const KIND_LABELS = { investigation: "Investigation", finding: "Finding", engine: "Risk engine", safety: "Safety net",
+                        planner: "Planner note",
+                        explanation: "Explanation", notice: "Notice", report: "Report" };
+
+  function eventView(e, r) {
+    const secrets = secretsOf(r);
+    const ids = new Set(isReport(r) ? r.findings.map((f) => f.id) : []);
+    const kind = eventKind(e);
+    return {
+      step: e.step, agent: scrub(e.agent, secrets), action: scrub(e.action, secrets), reason: scrub(e.reason, secrets),
+      summary: splitIds(scrub(e.result_summary, secrets), ids), status: e.status, kind: kind, kindLabel: KIND_LABELS[kind],
+    };
+  }
+
+  function splitIds(text, validIds) {
+    const out = [];
+    const re = /\bF\d+\b/g;
+    let last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      if (!validIds.has(m[0])) continue;
+      if (m.index > last) out.push({ text: text.slice(last, m.index) });
+      out.push({ id: m[0] });
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) out.push({ text: text.slice(last) });
+    return out;
+  }
+
+  function evidenceStatus(fileName, r) {
+    const meta = EVIDENCE_FILES[fileName];
+    if (!meta) return { status: "Uploaded", cls: "chip-uploaded", ids: [] };
+    if (!isReport(r)) return { status: "Pending verification", cls: "chip-pending", ids: [] };
+    const node = ((r.graph && r.graph.nodes) || []).find((n) => n.id === meta.node);
+    const byId = new Map(r.findings.map((f) => [f.id, f]));
+    let linked = ((node && node.finding_ids) || []).map((id) => byId.get(id)).filter(Boolean);
+    if (meta.checks) linked = linked.filter((f) => meta.checks.includes(f.check));
+    if (!linked.length) return { status: "Not assessed", cls: "chip-na", ids: [] };
+    const issues = linked.filter((f) => f.severity !== "ok");
+    if (!issues.length) return { status: "Verified", cls: "chip-verified", ids: linked.map((f) => f.id) };
+    const serious = issues.some((f) => f.severity === "major" || f.severity === "critical");
+    return { status: "Finding detected", cls: serious ? "chip-finding" : "chip-minor", ids: issues.map((f) => f.id) };
+  }
+
+  function evidenceType(fileName) {
+    const meta = EVIDENCE_FILES[fileName];
+    return meta ? meta.type : guessType(fileName);
+  }
+
+  function guessType(name) {
+    const n = String(name || "").toLowerCase();
+    if (/cert|epr/.test(n)) return "epr_certificate";
+    if (/invoice|bill|\binv/.test(n)) return "invoice";
+    if (/weigh|\bwb[\b_-]?/.test(n)) return "weighbridge";
+    if (/transport|lorry|\blr[\b_-]?|delivery|challan/.test(n)) return "transporter";
+    if (/gps|track|\.csv$|\.gpx$/.test(n)) return "gps";
+    if (/\.(jpe?g|png|heic|webp)$/.test(n) && /photo|facility|site|img|image/.test(n)) return "photo";
+    return "unknown";
+  }
+
+  const api = {
+    VERDICTS, HUMAN_DECISION, ADVISORY, DRAFT_LABEL, WITHHELD, DOC_LABELS, EVIDENCE_FILES,
+    isReport, secretsOf, scrub, formatValue, docLabel, findingRows, verdictView, humanReview, noticeView,
+    explanationView, fingerprintView, breakdownView, sourcesView, eventKind, eventView, splitIds,
+    evidenceStatus, evidenceType, guessType,
+  };
+  root.SatyaCore = api;
+  if (typeof module !== "undefined" && module.exports) module.exports = api;
+})(typeof window !== "undefined" ? window : globalThis);
+</script>
+
+<!-- DOM rendering. All text goes through textContent; no HTML is built from data. -->
+<script>
+(function () {
+  "use strict";
+  const C = window.SatyaCore;
+  const POLL_MS = 1000;
+  const POLL_TIMEOUT_MS = 120000;
+  const NODE_POSITIONS = {
+    company: [-330, 30], claim: [-170, -60], invoice: [-170, 130], certificate: [0, -140], recycler: [180, -60],
+    facility: [340, 50], weighbridge: [180, 150], truck: [0, 200], transporter: [-170, 270], gps: [180, 280],
+  };
+  const TINTS = { red: "#fef2f2", amber: "#fffbeb", green: "#f0fdf4", neutral: "#f1f5f9" };
+
+  const state = { cases: [], caseId: null, uploads: [], report: null, events: [], network: null, busy: false };
+  const $ = (id) => document.getElementById(id);
+
+  function h(tag, props, ...children) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(props || {})) {
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "class") node.className = v;
+      else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+      else node.setAttribute(k, v === true ? "" : v);
+    }
+    for (const child of children.flat(Infinity)) {
+      if (child === null || child === undefined || child === false) continue;
+      node.appendChild(child instanceof Node ? child : document.createTextNode(String(child)));
+    }
+    return node;
+  }
+  const clear = (node) => { while (node.firstChild) node.removeChild(node.firstChild); return node; };
+
+  function findingById(id) { return state.report ? state.report.findings.find((f) => f.id === id) : null; }
+
+  function idChip(id) {
+    const f = findingById(id);
+    return h("button", { class: "fid" + (f ? " sev-" + f.severity : ""), type: "button", title: "Show finding " + id,
+                         onclick: () => selectFinding(id) }, id);
+  }
+
+  function segments(list) {
+    return list.map((s) => (s.id ? idChip(s.id) : document.createTextNode(s.text)));
+  }
+
+  function setPipeline(stage) {
+    const order = ["evidence", "verification", "explanation", "human"];
+    const idx = order.indexOf(stage);
+    document.querySelectorAll(".pipe-step").forEach((el) => {
+      const i = order.indexOf(el.dataset.step);
+      el.classList.toggle("active", i === idx);
+      el.classList.toggle("done", i < idx);
+    });
+  }
+
+  // ---------------- Input panel ----------------
+  function renderCaseSelect() {
+    const select = clear($("case-select"));
+    for (const c of state.cases) select.appendChild(h("option", { value: c.case_id }, c.label));
+    select.value = state.caseId;
+    select.disabled = false;
+    $("verify-btn").disabled = false;
+  }
+
+  function currentCase() { return state.cases.find((c) => c.case_id === state.caseId); }
+
+  function docCard(name, typeLabel, status, extra) {
+    const ext = (name.split(".").pop() || "").toUpperCase().slice(0, 4);
+    const chipKids = [status.status];
+    const chip = h("span", { class: "chip " + status.cls }, chipKids);
+    const idRow = status.ids && status.ids.length && status.status === "Finding detected"
+      ? h("div", { class: "doc-note" }, "Linked findings: ", status.ids.map((id) => [idChip(id), " "])) : null;
+    return h("li", { class: "doc" }, h("div", { class: "doc-icon" }, ext),
+      h("div", {}, h("div", { class: "doc-name", title: name }, name), h("div", { class: "doc-type" }, typeLabel)),
+      h("div", {}, chip, extra || null), idRow);
+  }
+
+  function renderCaseEvidence() {
+    const c = currentCase();
+    const meta = $("case-meta");
+    clear(meta);
+    if (c) meta.append(c.title, " · Recycler ", c.recycler_reg_no, c.recycler_name ? " (" + c.recycler_name + ")" : "");
+    const list = clear($("doc-list"));
+    for (const file of (c && c.evidence) || []) {
+      const status = C.evidenceStatus(file, state.report && state.report.claim_id === state.caseId ? state.report : null);
+      list.appendChild(docCard(file, C.docLabel(C.evidenceType(file)), status));
+    }
+  }
+
+  function renderUploads() {
+    const list = clear($("upload-list"));
+    state.uploads.forEach((u, i) => {
+      const select = h("select", { "aria-label": "Evidence type for " + u.name,
+        onchange: (e) => { u.type = e.target.value; } },
+        Object.entries(C.DOC_LABELS).filter(([k]) => k !== "facility").map(([k, label]) => h("option", { value: k, selected: k === u.type }, label)));
+      const remove = h("button", { class: "btn-x", type: "button", title: "Remove " + u.name,
+        onclick: () => { state.uploads.splice(i, 1); renderUploads(); } }, "×");
+      const card = docCard(u.name, "", { status: "Uploaded", cls: "chip-uploaded", ids: [] }, remove);
+      card.children[1].children[1].appendChild(select);
+      card.appendChild(h("div", { class: "doc-note" }, "Uploaded only — not verified. This build verifies the demo evidence sets; uploaded files are not sent to the backend."));
+      list.appendChild(card);
+    });
+  }
+
+  function addFiles(files) {
+    for (const f of files) state.uploads.push({ name: f.name, type: C.guessType(f.name) });
+    renderUploads();
+  }
+
+  // ---------------- Activity ----------------
+  function renderEvents() {
+    const list = clear($("events"));
+    $("events-empty").hidden = state.events.length > 0;
+    let phase = null;
+    for (const e of state.events) {
+      const v = C.eventView(e, state.report);
+      const p = ["explanation", "notice", "report"].includes(v.kind) ? "Explanation & report"
+              : v.kind === "engine" ? "Deterministic risk engine" : "Investigation";
+      if (p !== phase) { list.appendChild(h("li", { class: "ev-phase" }, p)); phase = p; }
+      list.appendChild(h("li", { class: "event ev-" + v.status + " k-" + v.kind },
+        h("div", { class: "ev-step", title: "Status: " + v.status }, String(v.step)),
+        h("div", {},
+          h("div", { class: "ev-head" }, h("span", { class: "ev-agent" }, v.agent), h("span", { class: "ev-kind" }, v.kindLabel)),
+          h("div", { class: "ev-action" }, v.action),
+          h("div", { class: "ev-reason" }, "Why: ", v.reason),
+          h("div", { class: "ev-summary" }, segments(v.summary)))));
+    }
+    $("activity-meta").textContent = state.events.length ? state.events.length + " steps" : "";
+    const body = $("events").parentElement;
+    if (state.busy) body.scrollTop = body.scrollHeight;
+  }
+
+  // ---------------- Verdict / states ----------------
+  function renderIntro() {
+    const body = clear($("verdict-body"));
+    body.appendChild(h("div", { class: "intro" },
+      h("h3", {}, "Verify an EPR recycling claim against its whole evidence chain"),
+      h("p", {}, "Choose a demo claim and press Verify. An AI agent gathers the evidence, deterministic code runs every check and scores the risk, and the result is explained for a human compliance officer. Nothing is approved or rejected automatically."),
+      h("ul", { class: "checks-grid" },
+        [["Registry", "Recycler exists, is not suspended, name matches"],
+         ["Quantity", "Certificate & invoice vs. weighbridge, confirmed by transporter"],
+         ["Capacity", "Claimed tonnage vs. the facility's daily capacity"],
+         ["Timeline", "Delivery & weighbridge times vs. truck GPS"],
+         ["Image", "Facility photo metadata and re-use across claims"],
+         ["Manipulation", "Instructions hidden in documents are flagged, never obeyed"]]
+          .map(([t, d]) => h("li", {}, h("b", {}, t), d)))));
+  }
+
+  function renderLoading() {
+    clear($("verdict-body")).appendChild(h("div", { class: "loading" }, h("div", { class: "spinner", "aria-hidden": "true" }),
+      h("div", {}, h("div", { class: "verdict-headline" }, "Verification in progress"),
+        h("div", { class: "verdict-reason" }, "The agent is gathering and checking the evidence. Steps appear in the activity feed as they complete."))));
+    $("verdict-meta").textContent = "";
+  }
+
+  function renderError(message) {
+    clear($("verdict-body")).appendChild(h("div", { class: "error-box", role: "alert" },
+      h("strong", {}, "Verification could not be completed. "), message,
+      h("div", {}, "No result is shown because the backend did not return a report.")));
+    setPipeline("evidence");
+  }
+
+  function renderVerdict() {
+    const v = C.verdictView(state.report);
+    const hr = C.humanReview(state.report);
+    const body = clear($("verdict-body"));
+    if (!v) { renderError("The report returned by the backend is incomplete."); return; }
+    $("verdict-meta").textContent = "Claim " + v.claimId;
+    body.appendChild(h("div", { class: "verdict-grid" },
+      h("div", { class: "verdict-badge " + v.cls }, h("div", { class: "vb-label" }, "Risk verdict"), h("div", { class: "vb-value" }, v.label)),
+      h("div", { class: "score-block" }, h("div", { class: "sb-value" }, String(v.score), h("small", {}, " / 100")),
+        h("div", { class: "sb-band" }, "Score band: ", v.band.replace("_", " "))),
+      h("div", { class: "verdict-detail" },
+        h("div", { class: "verdict-headline" }, v.headline),
+        h("div", { class: "verdict-reason" }, segments(C.splitIds(v.reason, new Set(state.report.findings.map((f) => f.id))))),
+        v.escalated ? h("div", { class: "escalation" }, "Escalated by verdict policy: a critical finding backed by direct evidence (",
+          v.escalatedBy.map((id, i) => [i ? ", " : "", idChip(id)]), ") makes the verdict HIGH. The score itself is unchanged.") : null)));
+    body.appendChild(h("div", { class: "recommendation" }, h("strong", {}, "Recommendation: "), v.recommendation));
+    body.appendChild(h("div", { class: "decision" }, h("strong", {}, hr.decision), h("span", {}, hr.advisory)));
+  }
+
+  // ---------------- Graph ----------------
+  function renderGraph() {
+    const container = clear($("graph"));
+    const graph = state.report && state.report.graph;
+    if (!graph || !Array.isArray(graph.nodes)) { container.appendChild(h("p", { class: "empty graph-fallback" }, "No graph in this report.")); return; }
+    if (typeof vis === "undefined" || !vis.Network) { renderGraphFallback(container, graph); return; }
+    const secrets = C.secretsOf(state.report);
+    const nodes = graph.nodes.map((n) => {
+      const issues = n.finding_ids.filter((id) => { const f = findingById(id); return f && f.severity !== "ok"; });
+      const pos = NODE_POSITIONS[n.id] || [0, 0];
+      return {
+        id: n.id, x: pos[0], y: pos[1], shape: "box", margin: 8, widthConstraint: { maximum: 170 },
+        borderWidth: n.status === "red" || n.status === "amber" ? 3 : 1.5,
+        label: n.group.toUpperCase() + "\n" + C.scrub(n.label, secrets) + (issues.length ? "\n⚑ " + issues.join(" ") : ""),
+        color: { background: TINTS[n.status] || TINTS.neutral, border: n.color, highlight: { background: "#ffffff", border: "#1d4ed8" } },
+        font: { face: "IBM Plex Sans, sans-serif", size: 15, color: "#0f172a" },
+      };
+    });
+    const edges = graph.edges.map((e) => ({
+      id: e.id, from: e.from, to: e.to, label: C.scrub(e.label, secrets), arrows: { to: { enabled: true, scaleFactor: 0.6 } },
+      color: { color: e.color, highlight: "#1d4ed8" }, width: e.status === "red" ? 3.5 : e.status === "amber" ? 2.5 : 1.4,
+      dashes: e.status === "neutral", font: { size: 13, face: "IBM Plex Mono, monospace", color: "#334155", strokeWidth: 4, strokeColor: "#fbfcfe" },
+      smooth: { type: "curvedCW", roundness: 0.08 },
+    }));
+    state.network = new vis.Network(container, { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) }, {
+      physics: false, interaction: { hover: true, dragView: true, zoomView: true },
+      layout: { improvedLayout: false },
+    });
+    state.network.once("afterDrawing", () => state.network.fit({ animation: false }));
+    clear($("inspector")).appendChild(h("p", { class: "empty" },
+      "Click a node, a relationship or a finding ID to see the linked findings. Red = major/critical, amber = minor, green = checked and OK."));
+    state.network.on("click", (p) => {
+      if (p.nodes.length) inspect(graph.nodes.find((n) => n.id === p.nodes[0]), "node");
+      else if (p.edges.length) inspect(graph.edges.find((e) => e.id === p.edges[0]), "edge");
+    });
+  }
+
+  function renderGraphFallback(container, graph) {
+    container.style.height = "auto";
+    container.appendChild(h("div", { class: "graph-fallback" },
+      h("p", { class: "empty" }, "The graph library could not be loaded (offline?). The evidence chain is listed instead; the report is unaffected."),
+      h("ul", { class: "doc-list" }, graph.nodes.map((n) => h("li", { class: "doc", onclick: () => inspect(n, "node") },
+        h("div", { class: "doc-icon" }, n.group.slice(0, 3).toUpperCase()), h("div", {}, n.group, " — ", n.label),
+        h("span", { class: "chip " + ({ red: "chip-finding", amber: "chip-minor", green: "chip-verified" }[n.status] || "chip-na") }, n.status))))));
+  }
+
+  function inspect(item, kind) {
+    const box = clear($("inspector"));
+    if (!item) return;
+    const secrets = C.secretsOf(state.report);
+    const title = kind === "node" ? item.group + " — " + C.scrub(item.label, secrets) : "Relationship: " + C.scrub(item.label, secrets);
+    box.appendChild(h("h4", {}, title));
+    box.appendChild(h("div", { class: "panel-meta" }, "Status: ", item.status, item.severity ? " (worst finding: " + item.severity + ")" : ""));
+    const rows = C.findingRows(state.report).filter((r) => item.finding_ids.includes(r.id));
+    if (!rows.length) { box.appendChild(h("p", { class: "empty" }, "No finding is linked to this element.")); return; }
+    box.appendChild(h("ul", { class: "doc-list", style: "margin-top:8px" }, rows.map((r) =>
+      h("li", { class: "doc", style: "grid-template-columns:auto minmax(0,1fr)" }, idChip(r.id),
+        h("div", {}, h("span", { class: "sev sev-" + r.severity }, r.severity), " ", r.message)))));
+  }
+
+  function selectFinding(id) {
+    if (!state.report) return;
+    document.querySelectorAll(".findings tr").forEach((tr) => tr.classList.toggle("selected", tr.dataset.id === id));
+    const row = document.querySelector('.findings tr[data-id="' + id + '"]');
+    if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
+    const graph = state.report.graph || { nodes: [], edges: [] };
+    const nodeIds = graph.nodes.filter((n) => n.finding_ids.includes(id)).map((n) => n.id);
+    const edgeIds = graph.edges.filter((e) => e.finding_ids.includes(id)).map((e) => e.id);
+    if (state.network) state.network.setSelection({ nodes: nodeIds, edges: edgeIds }, { unselectAll: true, highlightEdges: false });
+    const f = findingById(id);
+    const box = clear($("inspector"));
+    const [r] = C.findingRows(state.report).filter((x) => x.id === id);
+    if (!f || !r) return;
+    box.appendChild(h("h4", {}, idChip(id), " ", r.category));
+    box.appendChild(h("div", {}, h("span", { class: "sev sev-" + r.severity }, r.severity), " · confidence ", r.confidenceText));
+    box.appendChild(h("p", {}, r.message));
+    box.appendChild(h("ul", { class: "ev-list" }, r.evidence.map((e) => h("li", {}, h("b", {}, e.key + ": "), h("span", { class: e.withheld ? "withheld" : "" }, e.value)))));
+    box.appendChild(h("div", { class: "panel-meta", style: "margin-top:8px" }, "Graph: ", nodeIds.length ? nodeIds.join(", ") : "no node", edgeIds.length ? " · " + edgeIds.join(", ") : ""));
+  }
+
+  // ---------------- Report ----------------
+  function copyButton(getText, label) {
+    const btn = h("button", { class: "btn", type: "button" }, label);
+    btn.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(getText()); btn.textContent = "Copied"; }
+      catch (err) { btn.textContent = "Copy failed — select the text manually"; }
+      setTimeout(() => { btn.textContent = label; }, 1800);
+    });
+    return btn;
+  }
+
+  function renderReport() {
+    const r = state.report;
+    const body = clear($("report-body"));
+    const rows = C.findingRows(r);
+    const issues = rows.filter((x) => x.isIssue).length;
+    $("report-meta").textContent = rows.length + " findings · " + issues + " need attention";
+
+    const exp = C.explanationView(r);
+    body.appendChild(h("div", { class: "section" },
+      h("div", { class: "section-title" }, "Explanation", h("span", { class: "src-tag" }, exp.source)),
+      h("div", { class: "explanation" }, segments(exp.segments))));
+
+    const onlyIssues = h("input", { type: "checkbox", onchange: (e) => tbody.querySelectorAll("tr.is-ok").forEach((tr) => { tr.hidden = e.target.checked; }) });
+    const tbody = h("tbody", {}, rows.map((x) => h("tr", { class: x.isIssue ? "is-issue" : "is-ok", "data-id": x.id },
+      h("td", {}, idChip(x.id)),
+      h("td", {}, h("span", { class: "sev sev-" + x.severity }, x.severity)),
+      h("td", {}, x.category),
+      h("td", { class: "col-conf mono" }, x.confidenceText),
+      h("td", { class: "col-doc" }, x.source),
+      h("td", {}, h("div", { class: "msg" }, x.message),
+        h("ul", { class: "ev-list" }, x.evidence.map((e) => h("li", {}, h("b", {}, e.key + ": "), h("span", { class: e.withheld ? "withheld" : "" }, e.value))))))));
+    body.appendChild(h("div", { class: "section" },
+      h("div", { class: "section-title" }, "Findings", h("label", { class: "toggle" }, onlyIssues, "Issues only")),
+      h("div", { class: "table-scroll" }, h("table", { class: "findings" },
+        h("thead", {}, h("tr", {}, ["ID", "Severity", "Category", "Confidence", "Document / source", "Finding & evidence"].map((t, i) =>
+          h("th", { class: i === 3 ? "col-conf" : i === 4 ? "col-doc" : null }, t)))), tbody))));
+
+    const b = C.breakdownView(r);
+    body.appendChild(h("div", { class: "section" }, h("details", { class: "box" },
+      h("summary", {}, "Score breakdown — how ", String(r.score), "/100 was computed"),
+      h("div", {}, h("p", { class: "formula" }, b.formula + (b.policy ? "\n" + b.policy : "")),
+        h("table", { class: "breakdown" }, h("tr", {}, ["Finding", "Severity", "Weight", "Confidence", "Points"].map((t) => h("th", {}, t))),
+          b.rows.filter((x) => x.points > 0).map((x) => h("tr", {}, h("td", {}, x.id), h("td", {}, x.severity), h("td", {}, String(x.weight)),
+            h("td", {}, String(x.confidence)), h("td", {}, String(x.points)))),
+          h("tr", {}, h("td", { colspan: "4" }, "Score = min(100, round(sum))"), h("td", {}, String(r.score))))))));
+
+    const n = C.noticeView(r);
+    const noticeSection = h("div", { class: "section" }, h("div", { class: "section-title" }, "Clarification notice to the recycler",
+      n ? h("span", { class: "src-tag" }, "Opening: " + n.source) : null));
+    if (n) {
+      noticeSection.appendChild(h("div", { class: "notice-draft" },
+        h("div", { class: "notice-banner" }, h("span", {}, n.label), copyButton(() => n.text, "Copy draft")),
+        h("pre", { class: "notice-text" }, n.text)));
+    } else {
+      noticeSection.appendChild(h("p", { class: "empty" }, "No clarification notice — the verdict is LOW. Routine human review still applies."));
+    }
+    body.appendChild(noticeSection);
+
+    const s = C.sourcesView(r);
+    body.appendChild(h("div", { class: "section" }, h("div", { class: "section-title" }, "Evidence sources & agent"),
+      h("dl", { class: "kv" },
+        s.docs.map((d) => [h("dt", {}, d.doc), h("dd", {}, d.source)]),
+        h("dt", {}, "Agent planner"), h("dd", {}, s.planner),
+        h("dt", {}, "Agent summary"), h("dd", {}, s.agentSummary || "—"))));
+
+    const fp = C.fingerprintView(r);
+    const fpSection = h("div", { class: "section" }, h("div", { class: "section-title" }, "Report Integrity Fingerprint"));
+    if (fp) {
+      const full = h("div", { class: "fp-full", hidden: true }, fp.full);
+      const toggle = h("button", { class: "btn", type: "button", onclick: () => { full.hidden = !full.hidden; toggle.textContent = full.hidden ? "Show full" : "Hide"; } }, "Show full");
+      fpSection.append(h("div", { class: "fingerprint" }, h("span", { class: "fp-hash", title: fp.full }, "SHA-256 " + fp.short), toggle, copyButton(() => fp.full, "Copy")),
+        full, h("div", { class: "fp-note" }, "Computed by the backend over the canonical report JSON (sorted keys, fingerprint field excluded). Generated ", fp.generatedAt, "."));
+    } else {
+      fpSection.appendChild(h("p", { class: "empty" }, "No fingerprint in this report."));
+    }
+    body.appendChild(fpSection);
+  }
+
+  // ---------------- Flow ----------------
+  function resetResult() {
+    state.report = null; state.events = [];
+    renderEvents(); renderCaseEvidence();
+    clear($("report-body")).appendChild(h("p", { class: "empty" }, "The report appears here after verification."));
+    clear($("graph")); clear($("inspector")).appendChild(h("p", { class: "empty" }, "The evidence graph appears after verification."));
+    $("report-meta").textContent = "";
+    if (state.network) { state.network.destroy(); state.network = null; }
+  }
+
+  async function fetchJson(url, options) {
+    const res = await fetch(url, options);
+    if (!res.ok) {
+      let detail = res.status + " " + res.statusText;
+      try { const body = await res.json(); if (body && body.detail) detail = body.detail; } catch (e) { /* not JSON */ }
+      throw new Error(detail);
+    }
+    return res.json();
+  }
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  async function verify() {
+    if (state.busy || !state.caseId) return;
+    state.busy = true;
+    $("verify-btn").disabled = true; $("case-select").disabled = true;
+    $("verify-btn").textContent = "Verifying…";
+    resetResult(); renderLoading(); setPipeline("verification");
+    try {
+      const { job_id } = await fetchJson("/api/verify", { method: "POST", headers: { "Content-Type": "application/json" },
+                                                          body: JSON.stringify({ case_id: state.caseId }) });
+      const started = Date.now();
+      for (;;) {
+        const job = await fetchJson("/api/jobs/" + encodeURIComponent(job_id));
+        if (job.events.length !== state.events.length) { state.events = job.events; renderEvents(); }
+        if (job.status === "done") {
+          if (!C.isReport(job.report)) throw new Error("The backend returned an incomplete report.");
+          state.report = job.report; state.events = job.events;
+          setPipeline("human");
+          renderVerdict(); renderEvents(); renderCaseEvidence(); renderGraph(); renderReport();
+          break;
+        }
+        if (job.status === "failed") throw new Error(job.error || "The verification job failed.");
+        if (Date.now() - started > POLL_TIMEOUT_MS) throw new Error("Timed out waiting for the verification result.");
+        await sleep(POLL_MS);
+      }
+    } catch (err) {
+      state.report = null;
+      renderError(err.message || String(err));
+    } finally {
+      state.busy = false;
+      $("verify-btn").disabled = false; $("case-select").disabled = false;
+      $("verify-btn").textContent = "Verify claim";
+    }
+  }
+
+  async function init() {
+    renderIntro();
+    const drop = $("dropzone");
+    $("file-input").addEventListener("change", (e) => { addFiles(e.target.files); e.target.value = ""; });
+    ["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("drag"); }));
+    ["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("drag"); }));
+    drop.addEventListener("drop", (e) => addFiles(e.dataTransfer.files));
+    $("case-select").addEventListener("change", (e) => { state.caseId = e.target.value; resetResult(); renderIntro(); setPipeline("evidence"); });
+    $("verify-btn").addEventListener("click", verify);
+    try {
+      state.cases = await fetchJson("/api/cases");
+      const params = new URLSearchParams(location.search);
+      const wanted = params.get("case");
+      state.caseId = state.cases.some((c) => c.case_id === wanted) ? wanted : (state.cases[0] && state.cases[0].case_id);
+      $("mode-meta").textContent = state.cases.length + " demo claims";
+      renderCaseSelect(); renderCaseEvidence();
+      if (params.get("run") === "1") verify();
+    } catch (err) {
+      renderError("Could not load the demo claims from the backend (" + (err.message || err) + ").");
+    }
+  }
+
+  window.addEventListener("error", (e) => renderError("Unexpected page error: " + (e.message || "unknown") + "."));
+  init();
+})();
+</script>
 </body>
 </html>

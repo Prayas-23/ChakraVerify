@@ -1,5 +1,8 @@
-"""Every test runs offline: sockets are blocked, DEMO_MODE is on, no API keys,
-and the LLM cache points at a temporary directory."""
+"""Every test runs offline: non-loopback sockets are blocked, DEMO_MODE is on,
+no API keys, and the LLM cache points at a temporary directory.
+
+Loopback is allowed because the asyncio event loop behind FastAPI's TestClient
+opens a local socket pair on Windows; nothing can reach the outside network."""
 import socket
 
 import pytest
@@ -8,6 +11,7 @@ from app import llm
 
 LLM_ENV = ["LLM_PROVIDER", "GEMINI_API_KEY", "GEMINI_BASE_URL", "GEMINI_MODEL",
            "GROQ_API_KEY", "GROQ_BASE_URL", "GROQ_MODEL"]
+LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 
 
 class NetworkBlocked(RuntimeError):
@@ -17,12 +21,19 @@ class NetworkBlocked(RuntimeError):
 @pytest.fixture(autouse=True)
 def offline(monkeypatch, tmp_path):
     attempts = []
+    real_connect = socket.socket.connect
 
-    def blocked(*args, **kwargs):
-        attempts.append(args)
-        raise NetworkBlocked("network access attempted during tests")
+    def guarded_connect(sock, address, *args, **kwargs):
+        if isinstance(address, tuple) and address and address[0] in LOOPBACK:
+            return real_connect(sock, address, *args, **kwargs)
+        attempts.append(address)
+        raise NetworkBlocked(f"network access attempted during tests: {address!r}")
 
-    monkeypatch.setattr(socket.socket, "connect", blocked)
+    def blocked(address, *args, **kwargs):
+        attempts.append(address)
+        raise NetworkBlocked(f"network access attempted during tests: {address!r}")
+
+    monkeypatch.setattr(socket.socket, "connect", guarded_connect)
     monkeypatch.setattr(socket, "create_connection", blocked)
     monkeypatch.setenv("DEMO_MODE", "true")
     for var in LLM_ENV:

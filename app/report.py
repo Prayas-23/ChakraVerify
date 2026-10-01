@@ -9,9 +9,11 @@ Pipeline (run_pipeline):
   pattern, scoring — once) → safe finding view → explanation → notice →
   report → fingerprint
 """
+import copy
 import hashlib
 import hmac
 import json
+import re
 from collections.abc import Callable
 from datetime import datetime, timezone
 
@@ -159,6 +161,57 @@ def verify_fingerprint(report: Report | dict, expected: str | None = None) -> bo
     if expected is None:
         expected = report.fingerprint_sha256 if isinstance(report, Report) else report.get("fingerprint_sha256", "")
     return hmac.compare_digest(fingerprint(report), str(expected).lower())
+
+
+# --- Public API view ------------------------------------------------------------------------
+REDACTION_MARKER = "[instruction-like text withheld]"
+
+
+def _injected_texts(report: dict) -> list[str]:
+    texts = []
+    for f in report.get("findings") or []:
+        excerpt = (f.get("evidence") or {}).get("excerpt") if f.get("check") == "manipulation" else None
+        if isinstance(excerpt, str):
+            texts += [part.strip() for part in excerpt.split(" | ") if len(part.strip()) >= 8]
+    return texts
+
+
+def _scrub(value, texts: list[str]):
+    if isinstance(value, str):
+        for text in texts:
+            value = re.sub(re.escape(text), REDACTION_MARKER, value, flags=re.IGNORECASE)
+        return value
+    if isinstance(value, list):
+        return [_scrub(v, texts) for v in value]
+    if isinstance(value, dict):
+        return {k: _scrub(v, texts) for k, v in value.items()}
+    return value
+
+
+def public_job_view(snapshot: dict) -> dict:
+    """Copy of a job snapshot that is safe to serve over the API.
+
+    The internal Report keeps the injected excerpt (audit trail, fingerprint).
+    The public copy replaces each manipulation finding's excerpt with
+    REDACTION_MARKER and scrubs that text from any other string. Everything
+    else — IDs, severities, categories, confidences, ordinary evidence and the
+    fingerprint of the internal report — is returned unchanged. The fingerprint
+    therefore verifies against the internal report, not this view.
+    """
+    view = copy.deepcopy(snapshot)
+    report = view.get("report")
+    redactions: list[str] = []
+    texts: list[str] = []
+    if isinstance(report, dict):
+        texts = _injected_texts(report)
+        for f in report.get("findings") or []:
+            evidence = f.get("evidence") or {}
+            if f.get("check") == "manipulation" and isinstance(evidence.get("excerpt"), str):
+                evidence["excerpt"] = REDACTION_MARKER
+                redactions.append(f"{f.get('id')}.evidence.excerpt")
+    view = _scrub(view, texts)
+    view["redactions"] = redactions
+    return view
 
 
 # --- Report assembly ----------------------------------------------------------------------
