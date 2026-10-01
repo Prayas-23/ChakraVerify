@@ -98,6 +98,51 @@ def test_tool_calls_are_normalised(monkeypatch):
     assert result["tool_calls"] == [{"id": "c1", "name": "finish", "arguments": '{"summary": "x"}'}]
 
 
+# --- Gemini 3 thought signatures (tool_calls[].extra_content) ----------------------------
+SIGNATURE = {"google": {"thought_signature": "CsQBAXLI2nwAbC+/=sig"}}
+
+
+def sdk_tool_call(extra: dict | None = None):
+    """A real openai SDK tool-call object, as the client deserialises Gemini's response."""
+    from openai.types.chat import ChatCompletionMessageToolCall
+    data = {"id": "c1", "type": "function", "function": {"name": "list_evidence", "arguments": '{"case_id": "x"}'}}
+    if extra is not None:
+        data["extra_content"] = extra
+    return ChatCompletionMessageToolCall.model_validate(data)
+
+
+def test_thought_signature_preserved_from_sdk_tool_call():
+    message = SimpleNamespace(content=None, tool_calls=[sdk_tool_call(SIGNATURE)])
+    [call] = llm._normalise(message)["tool_calls"]
+    assert call == {"id": "c1", "name": "list_evidence", "arguments": '{"case_id": "x"}', "extra_content": SIGNATURE}
+
+
+def test_thought_signature_preserved_through_chat_and_cache(monkeypatch):
+    live(monkeypatch, {"gemini": FakeClient([response(None, [sdk_tool_call(SIGNATURE)])]), "groq": FakeClient([])})
+    first = llm.chat(MESSAGES, tools=TOOLS)
+    second = llm.chat(MESSAGES, tools=TOOLS)  # served from the cache
+    assert first["tool_calls"][0]["extra_content"] == SIGNATURE
+    assert second["cached"] is True and second["tool_calls"][0]["extra_content"] == SIGNATURE
+
+
+@pytest.mark.parametrize("call", [
+    sdk_tool_call(),                                                     # SDK object, no extra field
+    SimpleNamespace(id="c1", function=SimpleNamespace(name="list_evidence", arguments='{"case_id": "x"}')),
+])
+def test_tool_call_without_extra_content_unchanged(call):
+    [normalised] = llm._normalise(SimpleNamespace(content=None, tool_calls=[call]))["tool_calls"]
+    assert normalised == {"id": "c1", "name": "list_evidence", "arguments": '{"case_id": "x"}'}
+    assert "extra_content" not in normalised
+
+
+@pytest.mark.parametrize("bad", ["a string", 42, ["list"]])
+def test_non_dict_extra_content_is_ignored(bad):
+    call = SimpleNamespace(id="c1", extra_content=bad,
+                           function=SimpleNamespace(name="finish", arguments="{}"))
+    [normalised] = llm._normalise(SimpleNamespace(content=None, tool_calls=[call]))["tool_calls"]
+    assert "extra_content" not in normalised
+
+
 def test_retries_429_then_falls_back_to_groq(monkeypatch):
     sleeps = []
     monkeypatch.setattr(llm, "_sleep", sleeps.append)

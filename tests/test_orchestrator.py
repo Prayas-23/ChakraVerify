@@ -220,6 +220,45 @@ def test_prose_reply_without_tool_call_finishes(monkeypatch):
     assert result["scoring"]["verdict"] == "HIGH"
 
 
+def test_thought_signature_replayed_unchanged_on_next_turn(monkeypatch):
+    """Gemini 3: the next request must carry each tool call's extra_content exactly as received."""
+    signature = {"google": {"thought_signature": "CsQBAXLI2nw+/=opaque"}}
+    seen = []
+
+    def gemini_like(messages, tools=None, response_format=None):
+        if tools is None:
+            raise llm.LLMUnavailable("extraction/writer: deterministic fallback")
+        seen.append(json.loads(json.dumps(messages)))
+        if len(seen) == 1:
+            return {"content": None, "tool_calls": [
+                {"id": "g1", "name": "list_evidence", "arguments": '{"case_id": "genuine", "reason": "start"}',
+                 "extra_content": signature},
+                {"id": "g2", "name": "check_image", "arguments": '{"case_id": "genuine", "reason": "photo"}'},
+            ]}
+        return {"content": "", "tool_calls": [
+            {"id": "g3", "name": "finish", "arguments": '{"summary": "done", "reason": "end"}'}]}
+
+    monkeypatch.setattr(llm, "chat", gemini_like)
+    _, result = run("genuine")
+
+    [assistant] = [m for m in seen[1] if m["role"] == "assistant"]
+    first, second = assistant["tool_calls"]
+    assert first == {"id": "g1", "type": "function", "extra_content": signature,
+                     "function": {"name": "list_evidence", "arguments": '{"case_id": "genuine", "reason": "start"}'}}
+    assert "extra_content" not in second  # absent stays absent
+    assert second["function"]["arguments"] == '{"case_id": "genuine", "reason": "photo"}'
+    assert [m["tool_call_id"] for m in seen[1] if m["role"] == "tool"] == ["g1", "g2"]
+    assert result["planner"] == "llm" and result["scoring"]["verdict"] == "LOW"
+
+
+def test_tool_calls_without_extra_content_rebuilt_as_before(monkeypatch):
+    fake = FakeAgentLLM([[tc("list_evidence", case_id="genuine")], [tc("finish", summary="done")]])
+    monkeypatch.setattr(llm, "chat", fake)
+    run("genuine")
+    [assistant] = [m for m in fake.seen[1] if m["role"] == "assistant"]
+    assert all(set(call) == {"id", "type", "function"} for call in assistant["tool_calls"])
+
+
 def test_unknown_case_is_rejected():
     with pytest.raises(ValueError):
         Investigation("../../etc")

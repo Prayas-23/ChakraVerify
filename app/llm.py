@@ -98,11 +98,23 @@ def _is_retryable(exc: Exception) -> bool:
         return False
 
 
+def _extra_content(tool_call) -> dict | None:
+    """Provider-specific tool-call data, e.g. Gemini 3's extra_content.google.thought_signature,
+    which must be sent back unchanged on the next turn (missing → HTTP 400)."""
+    extra = getattr(tool_call, "extra_content", None)
+    if extra is None:
+        extra = (getattr(tool_call, "model_extra", None) or {}).get("extra_content")
+    return extra if isinstance(extra, dict) else None
+
+
 def _normalise(message) -> dict:
-    tool_calls = [
-        {"id": tc.id or f"call_{i}", "name": tc.function.name, "arguments": tc.function.arguments or "{}"}
-        for i, tc in enumerate(getattr(message, "tool_calls", None) or [])
-    ]
+    tool_calls = []
+    for i, tc in enumerate(getattr(message, "tool_calls", None) or []):
+        call = {"id": tc.id or f"call_{i}", "name": tc.function.name, "arguments": tc.function.arguments or "{}"}
+        extra = _extra_content(tc)
+        if extra is not None:
+            call["extra_content"] = extra
+        tool_calls.append(call)
     return {"content": message.content, "tool_calls": tool_calls}
 
 

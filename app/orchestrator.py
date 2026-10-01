@@ -420,7 +420,10 @@ class Investigation:
                         messages.append({"role": "assistant", "content": response.get("content") or "",
                                          "tool_calls": [{"id": c["id"], "type": "function",
                                                          "function": {"name": c["name"],
-                                                                      "arguments": c["arguments"]}}
+                                                                      "arguments": c["arguments"]},
+                                                         # Gemini 3 thought signature, replayed unchanged
+                                                         **({"extra_content": c["extra_content"]}
+                                                            if "extra_content" in c else {})}
                                                         for c in calls]})
             if calls is None:
                 calls = [self.scripted_next()]
