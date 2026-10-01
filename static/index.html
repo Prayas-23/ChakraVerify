@@ -200,6 +200,14 @@
   .fp-hash { font-family: var(--mono); font-size: 13px; padding: 4px 8px; border-radius: 6px; background: #0f172a; color: #e2e8f0; }
   .fp-full { font-family: var(--mono); font-size: 12px; word-break: break-all; margin-top: 8px; padding: 8px 10px; border-radius: 6px; background: #0f172a; color: #e2e8f0; }
   .fp-note { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .btn-verify { border-color: var(--brand); color: var(--brand); }
+  .btn-verify:disabled { opacity: .6; cursor: progress; }
+  .fp-check { margin-top: 10px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); font-size: 13px; background: var(--panel-2); }
+  .fp-check .fp-hashes { margin-top: 6px; font-size: 11.5px; }
+  .fp-check .fp-hashes dd { word-break: break-all; }
+  .fp-valid { background: var(--green-bg); border-color: var(--green-line); color: var(--green-ink); }
+  .fp-invalid { background: var(--red-bg); border-color: var(--red-line); color: var(--red-ink); }
+  .fp-not_found, .fp-not_ready { background: var(--amber-bg); border-color: var(--amber-line); color: var(--amber-ink); }
   .page-foot { max-width: 1600px; margin: 0 auto; padding: 8px 20px 24px; font-size: 12.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: space-between; }
   .page-foot strong { color: var(--ink-2); }
 </style>
@@ -439,6 +447,66 @@
     return { full: fp, short: fp.slice(0, 12) + "…" + fp.slice(-8), generatedAt: (r && r.generated_at) || "" };
   }
 
+  // ---- Fingerprint verification (backend recomputes; the browser never hashes) ----
+  const HEX64 = /^[0-9a-f]{64}$/;
+  const FINGERPRINT_CHECK = {
+    valid: "Fingerprint valid — the backend recomputed the report's SHA-256 and it matches the stored fingerprint.",
+    invalid: "Fingerprint verification failed — report may have been modified.",
+    not_found: "This verification job no longer exists on the server (it may have been cleared by a restart). Run the verification again.",
+    not_ready: "This job is not yet ready for fingerprint verification. Wait until the verification has finished, then try again.",
+    error: "Fingerprint verification could not be completed. Please try again.",
+    no_job: "Run a verification first — there is no job to verify.",
+  };
+
+  function fingerprintVerifyUrl(jobId) {
+    return typeof jobId === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(jobId)
+      ? "/api/jobs/" + encodeURIComponent(jobId) + "/verify-fingerprint" : null;
+  }
+
+  // Map an HTTP status + JSON body to what the UI shows. Server error text is never shown.
+  function fingerprintCheckView(status, body, jobId, displayed) {
+    const view = (state, extra) => Object.assign({ state: state, message: FINGERPRINT_CHECK[state], stored: null, computed: null, matchesDisplayed: null }, extra || {});
+    if (status === 404) return view("not_found");
+    if (status === 409) return view("not_ready");
+    if (status !== 200 || !body || typeof body !== "object" || typeof body.valid !== "boolean" || body.job_id !== jobId) return view("error");
+    const stored = HEX64.test(body.stored_fingerprint || "") ? body.stored_fingerprint : null;
+    const computed = HEX64.test(body.computed_fingerprint || "") ? body.computed_fingerprint : null;
+    if (body.valid === true && !(stored && computed)) return view("error");
+    return view(body.valid ? "valid" : "invalid", {
+      stored: stored, computed: computed,
+      matchesDisplayed: displayed && stored ? stored === displayed : null,
+    });
+  }
+
+  // One request at a time: a second click while one is in flight returns the same promise.
+  function createFingerprintVerifier(fetchImpl) {
+    let inFlight = null;
+    return {
+      get busy() { return inFlight !== null; },
+      run(jobId, displayed) {
+        if (inFlight) return inFlight;
+        const url = fingerprintVerifyUrl(jobId);
+        if (!url) {
+          return Promise.resolve(Object.assign(fingerprintCheckView(-1, null, jobId, displayed),
+                                               { state: "no_job", message: FINGERPRINT_CHECK.no_job }));
+        }
+        inFlight = (async () => {
+          try {
+            const res = await fetchImpl(url, { method: "GET", headers: { Accept: "application/json" } });
+            let body = null;
+            try { body = await res.json(); } catch (e) { body = null; }
+            return fingerprintCheckView(res.status, body, jobId, displayed);
+          } catch (e) {
+            return fingerprintCheckView(-1, null, jobId, displayed);
+          } finally {
+            inFlight = null;
+          }
+        })();
+        return inFlight;
+      },
+    };
+  }
+
   function breakdownView(r) {
     if (!isReport(r)) return null;
     return { rows: Array.isArray(r.score_breakdown) ? r.score_breakdown : [], formula: r.formula || "", policy: r.policy || "" };
@@ -526,6 +594,7 @@
     isReport, secretsOf, scrub, formatValue, docLabel, findingRows, verdictView, humanReview, noticeView,
     explanationView, fingerprintView, breakdownView, sourcesView, eventKind, eventView, splitIds,
     evidenceStatus, evidenceType, guessType,
+    FINGERPRINT_CHECK, fingerprintVerifyUrl, fingerprintCheckView, createFingerprintVerifier,
   };
   root.SatyaCore = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
@@ -545,7 +614,8 @@
   };
   const TINTS = { red: "#fef2f2", amber: "#fffbeb", green: "#f0fdf4", neutral: "#f1f5f9" };
 
-  const state = { cases: [], caseId: null, uploads: [], report: null, events: [], network: null, busy: false };
+  const state = { cases: [], caseId: null, jobId: null, uploads: [], report: null, events: [], network: null, busy: false };
+  const fingerprintVerifier = C.createFingerprintVerifier((url, options) => fetch(url, options));
   const $ = (id) => document.getElementById(id);
 
   function h(tag, props, ...children) {
@@ -803,6 +873,34 @@
     return btn;
   }
 
+  // Asks the backend to recompute the fingerprint of this job's stored report.
+  function fingerprintVerifyButton(jobId, displayed, resultBox) {
+    const btn = h("button", { class: "btn btn-verify", type: "button", "data-job-id": jobId }, "Verify fingerprint");
+    btn.addEventListener("click", async () => {
+      if (fingerprintVerifier.busy) return;
+      btn.disabled = true; btn.textContent = "Verifying…";
+      const view = await fingerprintVerifier.run(jobId, displayed);
+      renderFingerprintCheck(resultBox, view);
+      btn.disabled = false; btn.textContent = "Verify again";
+    });
+    return btn;
+  }
+
+  function renderFingerprintCheck(box, view) {
+    clear(box);
+    box.hidden = false;
+    box.className = "fp-check fp-" + view.state;
+    box.appendChild(h("strong", {}, view.message));
+    if (view.stored || view.computed) {
+      box.appendChild(h("dl", { class: "kv fp-hashes" },
+        h("dt", {}, "Stored"), h("dd", { class: "mono" }, view.stored || "—"),
+        h("dt", {}, "Recomputed"), h("dd", { class: "mono" }, view.computed || "—")));
+    }
+    if (view.matchesDisplayed === false) {
+      box.appendChild(h("div", {}, "The stored fingerprint differs from the one shown above — reload the report."));
+    }
+  }
+
   function renderReport() {
     const r = state.report;
     const body = clear($("report-body"));
@@ -863,8 +961,10 @@
     if (fp) {
       const full = h("div", { class: "fp-full", hidden: true }, fp.full);
       const toggle = h("button", { class: "btn", type: "button", onclick: () => { full.hidden = !full.hidden; toggle.textContent = full.hidden ? "Show full" : "Hide"; } }, "Show full");
-      fpSection.append(h("div", { class: "fingerprint" }, h("span", { class: "fp-hash", title: fp.full }, "SHA-256 " + fp.short), toggle, copyButton(() => fp.full, "Copy")),
-        full, h("div", { class: "fp-note" }, "Computed by the backend over the canonical report JSON (sorted keys, fingerprint field excluded). Generated ", fp.generatedAt, "."));
+      const check = h("div", { class: "fp-check", role: "status", "aria-live": "polite", hidden: true });
+      const verifyBtn = C.fingerprintVerifyUrl(state.jobId) ? fingerprintVerifyButton(state.jobId, fp.full, check) : null;
+      fpSection.append(h("div", { class: "fingerprint" }, h("span", { class: "fp-hash", title: fp.full }, "SHA-256 " + fp.short), toggle, copyButton(() => fp.full, "Copy"), verifyBtn),
+        full, check, h("div", { class: "fp-note" }, "Computed by the backend over the canonical report JSON (sorted keys, fingerprint field excluded). Generated ", fp.generatedAt, "."));
     } else {
       fpSection.appendChild(h("p", { class: "empty" }, "No fingerprint in this report."));
     }
@@ -873,7 +973,7 @@
 
   // ---------------- Flow ----------------
   function resetResult() {
-    state.report = null; state.events = [];
+    state.report = null; state.events = []; state.jobId = null;
     renderEvents(); renderCaseEvidence();
     clear($("report-body")).appendChild(h("p", { class: "empty" }, "The report appears here after verification."));
     clear($("graph")); clear($("inspector")).appendChild(h("p", { class: "empty" }, "The evidence graph appears after verification."));
@@ -908,7 +1008,7 @@
         if (job.events.length !== state.events.length) { state.events = job.events; renderEvents(); }
         if (job.status === "done") {
           if (!C.isReport(job.report)) throw new Error("The backend returned an incomplete report.");
-          state.report = job.report; state.events = job.events;
+          state.report = job.report; state.events = job.events; state.jobId = job_id;
           setPipeline("human");
           renderVerdict(); renderEvents(); renderCaseEvidence(); renderGraph(); renderReport();
           break;
@@ -918,7 +1018,7 @@
         await sleep(POLL_MS);
       }
     } catch (err) {
-      state.report = null;
+      state.report = null; state.jobId = null;
       renderError(err.message || String(err));
     } finally {
       state.busy = false;

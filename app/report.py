@@ -165,6 +165,7 @@ def verify_fingerprint(report: Report | dict, expected: str | None = None) -> bo
 
 # --- Public API view ------------------------------------------------------------------------
 REDACTION_MARKER = "[instruction-like text withheld]"
+PUBLIC_JOB_ERROR = "Verification failed. Please retry the verification."
 
 
 def _injected_texts(report: dict) -> list[str]:
@@ -197,8 +198,13 @@ def public_job_view(snapshot: dict) -> dict:
     else — IDs, severities, categories, confidences, ordinary evidence and the
     fingerprint of the internal report — is returned unchanged. The fingerprint
     therefore verifies against the internal report, not this view.
+
+    A failed job's internal error (exception type and message) stays on the job;
+    the public view carries only PUBLIC_JOB_ERROR.
     """
     view = copy.deepcopy(snapshot)
+    if view.get("error") is not None:
+        view["error"] = PUBLIC_JOB_ERROR
     report = view.get("report")
     redactions: list[str] = []
     texts: list[str] = []

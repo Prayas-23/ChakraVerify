@@ -3,7 +3,14 @@
 Jobs live in process memory only (no database). A job runs in a background
 thread; its snapshot() is what GET /api/jobs/{id} will return:
 {"job_id", "case_id", "status", "events": [...], "report": {...} | None, "error"}.
+
+Retention is bounded: at most JOB_STORE_MAX_SIZE jobs are kept (env var,
+default 200). When a new job pushes the store over the cap, the oldest
+finished (done/failed) jobs are evicted first, in creation order. Queued and
+running jobs are never evicted, so the store may exceed the cap while that
+many jobs are active. An evicted job is simply unknown (404).
 """
+import os
 import threading
 import uuid
 from collections.abc import Callable
@@ -12,6 +19,19 @@ from datetime import datetime, timezone
 from app.models import AgentEvent
 
 STATUSES = ("queued", "running", "done", "failed")
+FINISHED_STATUSES = ("done", "failed")
+DEFAULT_MAX_JOBS = 200        # each report is tens of KB; 200 keeps memory small and covers a demo session
+MAX_JOBS_LIMIT = 10_000       # upper bound for the env setting
+MAX_JOBS_ENV = "JOB_STORE_MAX_SIZE"
+
+
+def configured_max_jobs() -> int:
+    """JOB_STORE_MAX_SIZE if it is an integer in 1..MAX_JOBS_LIMIT, else DEFAULT_MAX_JOBS."""
+    try:
+        value = int(os.getenv(MAX_JOBS_ENV, "").strip())
+    except ValueError:
+        return DEFAULT_MAX_JOBS
+    return value if 1 <= value <= MAX_JOBS_LIMIT else DEFAULT_MAX_JOBS
 
 
 def _now() -> str:
@@ -47,6 +67,10 @@ class Job:
         with self._lock:
             self.error, self.status, self.finished_at = error, "failed", _now()
 
+    def is_finished(self) -> bool:
+        with self._lock:
+            return self.status in FINISHED_STATUSES
+
     def snapshot(self) -> dict:
         with self._lock:
             return {
@@ -62,19 +86,34 @@ class Job:
 
 
 class JobStore:
-    def __init__(self):
-        self._jobs: dict[str, Job] = {}
+    def __init__(self, max_size: int | None = None):
+        self._jobs: dict[str, Job] = {}   # insertion order = creation order (oldest first)
         self._lock = threading.Lock()
+        self.max_size = max_size if max_size is not None else configured_max_jobs()
 
     def create(self, case_id: str) -> Job:
         job = Job(case_id)
         with self._lock:
             self._jobs[job.id] = job
+            self._evict_finished_locked()
         return job
 
     def get(self, job_id: str) -> Job | None:
         with self._lock:
             return self._jobs.get(job_id)
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._jobs)
+
+    def _evict_finished_locked(self) -> None:
+        """Drop the oldest finished jobs until within max_size; active jobs are never dropped.
+        Lock order is always store → job, and Job never takes the store lock, so no deadlock."""
+        excess = len(self._jobs) - self.max_size
+        if excess <= 0:
+            return
+        for job_id in [jid for jid, job in self._jobs.items() if job.is_finished()][:excess]:
+            del self._jobs[job_id]
 
 
 store = JobStore()

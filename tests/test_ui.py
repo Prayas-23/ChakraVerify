@@ -69,11 +69,11 @@ def test_network_guard_still_blocks_external_hosts(offline):
         offline.clear()  # expected attempt; keep the fixture's no-network assertion for everything else
 
 
-def test_only_phase5_routes_added(client):
-    paths = {r.path for r in app.routes}
-    assert {"/health", "/", "/api/cases", "/api/verify", "/api/jobs/{job_id}"} <= paths
-    assert "/api/agent" not in paths
-    assert not any("fingerprint" in p for p in paths)
+def test_only_intended_routes_exist(client):
+    api_paths = {r.path for r in app.routes if r.path.startswith("/api")}
+    assert api_paths == {"/api/cases", "/api/verify", "/api/jobs/{job_id}", "/api/agent",
+                         "/api/jobs/{job_id}/verify-fingerprint"}
+    assert {"/health", "/"} <= {r.path for r in app.routes}
 
 
 # --- Static page -----------------------------------------------------------------
@@ -235,6 +235,156 @@ def test_activity_order_and_phase4_events_last(views, case_id):
     assert len(kinds) == len(fixtures[case_id]["events"])
     assert kinds[-3:] == ["explanation", "notice", "report"]
     assert "explanation" not in kinds[:-3] and "report" not in kinds[:-3]
+
+
+# --- Fingerprint verification button --------------------------------------------------------
+FP_RUNNER = r"""
+const core = require(process.argv[2]);
+const H1 = "a".repeat(64), H2 = "b".repeat(64), JOB = "abc123";
+const VALID = { job_id: JOB, stored_fingerprint: H1, computed_fingerprint: H1, valid: true };
+function fakeFetch(status, body, reject) {
+  const calls = [];
+  const fn = (url, init) => {
+    calls.push({ url, method: init && init.method });
+    if (reject) return Promise.reject(new Error("ECONNREFUSED 10.1.2.3 internal secret"));
+    return Promise.resolve({ status, json: () => (body === undefined ? Promise.reject(new Error("not json")) : Promise.resolve(body)) });
+  };
+  fn.calls = calls;
+  return fn;
+}
+(async () => {
+  const out = { urls: {
+    ok: core.fingerprintVerifyUrl(JOB), nul: core.fingerprintVerifyUrl(null), undef: core.fingerprintVerifyUrl(undefined),
+    empty: core.fingerprintVerifyUrl(""), traversal: core.fingerprintVerifyUrl("../x"), num: core.fingerprintVerifyUrl(5) } };
+  const scenarios = {
+    valid: [200, VALID],
+    invalid: [200, { job_id: JOB, stored_fingerprint: H1, computed_fingerprint: H2, valid: false }],
+    not_found: [404, { detail: "Unknown job" }],
+    not_ready: [409, { detail: "Job is running; no report to verify yet" }],
+    server_error: [500, { detail: "Traceback: internal secret" }],
+    non_json_error: [502, undefined],
+    malformed: [200, { job_id: JOB, valid: "yes" }],
+    wrong_job: [200, Object.assign({}, VALID, { job_id: "other" })],
+    valid_without_hashes: [200, { job_id: JOB, valid: true }],
+  };
+  for (const [name, [status, body]] of Object.entries(scenarios)) {
+    const f = fakeFetch(status, body);
+    const v = core.createFingerprintVerifier(f);
+    out[name] = { view: await v.run(JOB, H1), calls: f.calls, busyAfter: v.busy };
+  }
+  { const f = fakeFetch(0, null, true); out.network = { view: await core.createFingerprintVerifier(f).run(JOB, H1), calls: f.calls }; }
+  { const f = fakeFetch(200, VALID); out.no_job = { view: await core.createFingerprintVerifier(f).run(null, H1), calls: f.calls }; }
+  { const f = fakeFetch(200, VALID); out.mismatch = { view: await core.createFingerprintVerifier(f).run(JOB, H2) }; }
+  {
+    let release; const gate = new Promise((r) => { release = r; }); const calls = [];
+    const f = (url) => { calls.push(url); return gate.then(() => ({ status: 200, json: async () => VALID })); };
+    const v = core.createFingerprintVerifier(f);
+    const p1 = v.run(JOB, H1); const busyDuring = v.busy; const p2 = v.run(JOB, H1);
+    const callsWhileInFlight = calls.length; const samePromise = p1 === p2;
+    release();
+    const [r1, r2] = await Promise.all([p1, p2]);
+    const busyAfter = v.busy;
+    await v.run(JOB, H1);
+    out.double = { callsWhileInFlight, samePromise, busyDuring, busyAfter, results: [r1.state, r2.state], callsAfterRetry: calls.length };
+  }
+  out.messages = core.FINGERPRINT_CHECK;
+  console.log(JSON.stringify(out));
+})();
+"""
+
+
+@pytest.fixture(scope="module")
+def fp(tmp_path_factory):
+    if NODE is None:
+        pytest.skip("Node.js not installed; view-logic tests need it")
+    core = re.search(r'<script id="satyasetu-core">(.*?)</script>', INDEX, re.DOTALL)[1]
+    tmp = tmp_path_factory.mktemp("fp")
+    (tmp / "core.js").write_text(core, encoding="utf-8")
+    (tmp / "runner.js").write_text(FP_RUNNER, encoding="utf-8")
+    result = subprocess.run([NODE, str(tmp / "runner.js"), str(tmp / "core.js")],
+                            capture_output=True, text=True, encoding="utf-8", timeout=60)
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
+
+
+def test_verify_button_exists_in_page():
+    dom = INDEX[INDEX.index("<!-- DOM rendering."):]
+    assert '"Verify fingerprint"' in dom and "btn-verify" in dom
+    assert "fingerprintVerifier.run(jobId, displayed)" in dom
+
+
+def test_verify_button_only_rendered_with_a_job_id():
+    dom = INDEX[INDEX.index("<!-- DOM rendering."):]
+    assert "C.fingerprintVerifyUrl(state.jobId) ? fingerprintVerifyButton(state.jobId" in dom
+    assert "state.jobId = job_id" in dom                       # set only when the job is done
+    assert re.search(r"function resetResult\(\) \{\s*state\.report = null; state\.events = \[\]; state\.jobId = null;", dom)
+    assert "state.report = null; state.jobId = null;" in dom   # cleared on error
+
+
+def test_verify_url_requires_a_valid_job_id(fp):
+    assert fp["urls"] == {"ok": "/api/jobs/abc123/verify-fingerprint", "nul": None, "undef": None,
+                          "empty": None, "traversal": None, "num": None}
+
+
+def test_no_job_id_makes_no_request(fp):
+    assert fp["no_job"]["calls"] == [] and fp["no_job"]["view"]["state"] == "no_job"
+
+
+def test_button_calls_the_verify_endpoint_with_current_job_id(fp):
+    assert fp["valid"]["calls"] == [{"url": "/api/jobs/abc123/verify-fingerprint", "method": "GET"}]
+
+
+def test_valid_response_shows_success(fp):
+    view = fp["valid"]["view"]
+    assert view["state"] == "valid" and view["message"].startswith("Fingerprint valid")
+    assert view["stored"] == view["computed"] == "a" * 64 and view["matchesDisplayed"] is True
+
+
+def test_invalid_response_shows_tampering(fp):
+    view = fp["invalid"]["view"]
+    assert view["state"] == "invalid"
+    assert view["message"] == "Fingerprint verification failed — report may have been modified."
+    assert (view["stored"], view["computed"]) == ("a" * 64, "b" * 64)
+
+
+def test_404_handled_safely(fp):
+    view = fp["not_found"]["view"]
+    assert view["state"] == "not_found" and "no longer exists" in view["message"]
+
+
+def test_409_handled_safely(fp):
+    view = fp["not_ready"]["view"]
+    assert view["state"] == "not_ready" and "not yet ready" in view["message"]
+
+
+@pytest.mark.parametrize("case", ["server_error", "non_json_error", "network", "malformed", "wrong_job",
+                                  "valid_without_hashes"])
+def test_errors_handled_without_exposing_details(fp, case):
+    view = fp[case]["view"]
+    assert view["state"] == "error"
+    assert view["message"] == "Fingerprint verification could not be completed. Please try again."
+    assert "secret" not in json.dumps(view) and "Traceback" not in json.dumps(view)
+    assert view["stored"] is None and view["computed"] is None
+
+
+def test_displayed_fingerprint_mismatch_is_flagged(fp):
+    assert fp["mismatch"]["view"]["state"] == "valid" and fp["mismatch"]["view"]["matchesDisplayed"] is False
+
+
+def test_no_double_submit_while_request_in_flight(fp):
+    d = fp["double"]
+    assert d["callsWhileInFlight"] == 1 and d["samePromise"] is True
+    assert d["busyDuring"] is True and d["busyAfter"] is False
+    assert d["results"] == ["valid", "valid"]
+    assert d["callsAfterRetry"] == 2  # a later click makes a new request
+    assert all(fp[name]["busyAfter"] is False for name in ("valid", "invalid", "not_found", "server_error"))
+
+
+def test_verification_ui_does_not_hash_or_show_report_content():
+    assert "crypto.subtle" not in INDEX
+    dom = INDEX[INDEX.index("function renderFingerprintCheck"):INDEX.index("function renderReport")]
+    for forbidden in ("report", "findings", "excerpt", "innerHTML"):
+        assert forbidden not in dom.replace("reload the report", ""), forbidden
 
 
 def test_upload_type_guessing(views):

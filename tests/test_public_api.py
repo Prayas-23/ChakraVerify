@@ -117,6 +117,62 @@ def test_malicious_field_value_redacted_from_public_view(monkeypatch):
     assert report.verify_fingerprint(internal)
 
 
+# --- failed jobs: internal exception text never leaves the server --------------------------
+RAW_ERRORS = [
+    "internal detail /srv/app/secret_module.py line 42",
+    'Traceback (most recent call last):\n  File "C:\\app\\secret.py", line 7, in run',
+    "KeyError: 'GEMINI_API_KEY' at /usr/local/lib/python3.11/site-packages/x.py",
+]
+
+
+@pytest.mark.parametrize("raw", RAW_ERRORS)
+def test_failed_job_public_response_hides_exception(client, monkeypatch, raw):
+    def broken(case_id, emit):
+        raise RuntimeError(raw)
+
+    monkeypatch.setattr(jobs, "run_report", broken)
+    job_id = client.post("/api/verify", json={"case_id": "genuine"}).json()["job_id"]
+    job = jobs.store.get(job_id)
+    job.thread.join(timeout=10)
+    body = client.get(f"/api/jobs/{job_id}").json()
+
+    assert body["status"] == "failed" and body["report"] is None
+    assert body["error"] == report.PUBLIC_JOB_ERROR == "Verification failed. Please retry the verification."
+    serialized = json.dumps(body)
+    for leaked in ("RuntimeError", "Traceback", "secret", "/srv/", "/usr/", "C:\\\\", ".py", "line 42", "GEMINI"):
+        assert leaked not in serialized, leaked
+    # the internal job keeps the real error for debugging
+    assert job.snapshot()["error"] == f"RuntimeError: {raw}"
+
+
+def test_public_job_view_only_replaces_a_present_error():
+    view = report.public_job_view({"status": "failed", "events": [], "report": None,
+                                   "error": "ValueError: /srv/app/x.py"})
+    assert view["error"] == report.PUBLIC_JOB_ERROR
+    for status in ("queued", "running", "done"):
+        assert report.public_job_view({"status": status, "error": None})["error"] is None
+
+
+def test_ui_failed_state_shows_the_server_message():
+    """The UI's failed-job branch displays job.error as sent — now the fixed safe message."""
+    index = (checks.DATA_DIR.parent / "static" / "index.html").read_text(encoding="utf-8")
+    assert 'if (job.status === "failed") throw new Error(job.error || "The verification job failed.");' in index
+    assert "Verification failed. Please retry the verification." == report.PUBLIC_JOB_ERROR
+
+
+def test_successful_and_injection_jobs_have_no_error_and_stay_unchanged(client):
+    for case_id in ("genuine", "injection"):
+        public, job = run_job(client, case_id)
+        internal = job.snapshot()
+        assert public["error"] is None and internal["error"] is None
+        assert (public["report"]["score"], public["report"]["verdict"]) == EXPECTED[case_id]
+        if case_id == "genuine":
+            assert public["report"] == internal["report"]
+        else:
+            assert "SYSTEM NOTE" not in json.dumps(public) and public["redactions"] == ["F9.evidence.excerpt"]
+            assert report.verify_fingerprint(internal["report"])
+
+
 def test_empty_or_running_job_view():
     view = report.public_job_view({"status": "running", "events": [], "report": None})
     assert view == {"status": "running", "events": [], "report": None, "redactions": []}
