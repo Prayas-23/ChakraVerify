@@ -89,11 +89,16 @@ def _run(job: Job, runner: Runner) -> None:
         job.fail(f"{type(exc).__name__}: {exc}")
 
 
+def run_report(case_id: str, emit: Callable[[AgentEvent], None]) -> dict:
+    """Default runner: the full Phase 4 pipeline; the job's report is the Report as JSON."""
+    from app.report import run_pipeline
+    return run_pipeline(case_id, emit).model_dump(mode="json")
+
+
 def submit(case_id: str, runner: Runner | None = None) -> Job:
     """Create a job and run it in a background thread."""
     if runner is None:
-        from app.orchestrator import run_investigation
-        runner = run_investigation
+        runner = run_report
     job = store.create(case_id)
     job.thread = threading.Thread(target=_run, args=(job, runner), daemon=True, name=f"job-{job.id}")
     job.thread.start()

@@ -49,3 +49,17 @@ class Report(BaseModel):
     graph: dict                  # {nodes: [...], edges: [...]} for vis-network
     fingerprint_sha256: str
     generated_at: str
+    # Authoritative scoring detail (copied from app.scoring, never recomputed)
+    score_band: str = ""
+    verdict_reason: str = ""
+    escalated_by: list[str] = Field(default_factory=list)
+    formula: str = ""
+    policy: str = ""
+    # Agent run
+    agent_summary: str = ""
+    planner: str = ""
+    case_title: str = ""
+    extraction_sources: dict[str, str] = Field(default_factory=dict)
+    events: list[AgentEvent] = Field(default_factory=list)
+    explanation_source: str = ""        # llm | llm-cache | fallback
+    notice_source: str = ""             # llm | llm-cache | fallback | none

@@ -151,6 +151,10 @@ class Investigation:
         if self.emit:
             self.emit(event)
 
+    def log_event(self, agent: str, action: str, reason: str, result_summary: str, status: str) -> None:
+        """For post-investigation steps (explanation, notice, report): continues the numbering."""
+        self._event(agent, action, reason, result_summary, status)
+
     # --- tool dispatch --------------------------------------------------------
     def available(self) -> dict:
         return {

@@ -232,7 +232,7 @@ def test_job_runs_in_background_and_completes():
     snap = jobs.store.get(job.id).snapshot()
     assert snap["status"] == "done"
     assert snap["events"] and snap["events"][0]["agent"] == "Orchestrator"
-    assert snap["report"]["scoring"]["verdict"] == "HIGH"
+    assert snap["report"]["verdict"] == "HIGH"  # job report is now the Phase 4 Report
     assert set(snap) >= {"status", "events", "report"}
 
 
