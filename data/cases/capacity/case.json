@@ -1,0 +1,24 @@
+{
+  "number": 4,
+  "case_id": "capacity",
+  "title": "Capacity breach \u2014 333% of daily capacity",
+  "scenario": "Claim 10,000 kg in 1 day (333% of capacity); weights consistent",
+  "recycler_reg_no": "R003",
+  "producer": "Aster Consumer Electronics Ltd",
+  "claim": {
+    "quantity_kg": 10000,
+    "period_days": 1,
+    "date": "2026-09-18",
+    "certificate_id": "EPR-CERT-2026-0004"
+  },
+  "evidence": [
+    "epr_certificate.png",
+    "invoice.png",
+    "weighbridge.png",
+    "transporter.png",
+    "gps.csv",
+    "photo.jpg"
+  ],
+  "expected_verdict": "HIGH",
+  "expected_flags": []
+}

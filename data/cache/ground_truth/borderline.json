@@ -1,0 +1,50 @@
+{
+  "epr_certificate": {
+    "doc_type": "epr_certificate",
+    "recycler_name": "GreenGrid E-Waste Solutions",
+    "recycler_reg_no": "R002",
+    "quantity_kg": 9000.0,
+    "date": "2026-09-14",
+    "time": null,
+    "vehicle_no": null,
+    "certificate_id": "EPR-CERT-2026-0002",
+    "suspicious_content": false,
+    "suspicious_excerpt": null
+  },
+  "invoice": {
+    "doc_type": "invoice",
+    "recycler_name": "GreenGrid E-Waste Solutions",
+    "recycler_reg_no": "R002",
+    "quantity_kg": 9000.0,
+    "date": "2026-09-14",
+    "time": null,
+    "vehicle_no": null,
+    "certificate_id": "EPR-CERT-2026-0002",
+    "suspicious_content": false,
+    "suspicious_excerpt": null
+  },
+  "weighbridge": {
+    "doc_type": "weighbridge",
+    "recycler_name": "GreenGrid E-Waste Solutions",
+    "recycler_reg_no": "R002",
+    "quantity_kg": 8865.0,
+    "date": "2026-09-14",
+    "time": "09:45",
+    "vehicle_no": "MH12CD7788",
+    "certificate_id": null,
+    "suspicious_content": false,
+    "suspicious_excerpt": null
+  },
+  "transporter": {
+    "doc_type": "transporter",
+    "recycler_name": "GreenGrid E-Waste Solutions",
+    "recycler_reg_no": "R002",
+    "quantity_kg": 8865.0,
+    "date": "2026-09-14",
+    "time": "09:40",
+    "vehicle_no": "MH12CD7788",
+    "certificate_id": null,
+    "suspicious_content": false,
+    "suspicious_excerpt": null
+  }
+}

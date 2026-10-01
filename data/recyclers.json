@@ -1,0 +1,56 @@
+[
+  {
+    "reg_no": "R001",
+    "name": "EcoLoop Recyclers Pvt Ltd",
+    "state": "Odisha",
+    "capacity_kg_per_day": 5000,
+    "status": "registered",
+    "lat": 20.3,
+    "lon": 85.82
+  },
+  {
+    "reg_no": "R002",
+    "name": "GreenGrid E-Waste Solutions",
+    "state": "Maharashtra",
+    "capacity_kg_per_day": 2500,
+    "status": "registered",
+    "lat": 18.52,
+    "lon": 73.86
+  },
+  {
+    "reg_no": "R003",
+    "name": "Circuit Reclaim Industries",
+    "state": "Karnataka",
+    "capacity_kg_per_day": 3000,
+    "status": "registered",
+    "lat": 12.97,
+    "lon": 77.59
+  },
+  {
+    "reg_no": "R004",
+    "name": "Urban Mine Processing Ltd",
+    "state": "Tamil Nadu",
+    "capacity_kg_per_day": 15000,
+    "status": "registered",
+    "lat": 13.08,
+    "lon": 80.27
+  },
+  {
+    "reg_no": "R005",
+    "name": "QuickCert Recycling Co",
+    "state": "Uttar Pradesh",
+    "capacity_kg_per_day": 4000,
+    "status": "suspended",
+    "lat": 28.53,
+    "lon": 77.39
+  },
+  {
+    "reg_no": "R006",
+    "name": "Delta Metals Recovery",
+    "state": "Gujarat",
+    "capacity_kg_per_day": 6000,
+    "status": "registered",
+    "lat": 23.02,
+    "lon": 72.57
+  }
+]

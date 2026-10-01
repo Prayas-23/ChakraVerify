@@ -1,0 +1,26 @@
+{
+  "number": 6,
+  "case_id": "multi_small",
+  "title": "Several small anomalies across independent sources",
+  "scenario": "Weight diff 4%; 95% capacity use; photo EXIF missing; weighbridge time 25 min before GPS arrival \u2014 none decisive alone",
+  "recycler_reg_no": "R001",
+  "producer": "Aster Consumer Electronics Ltd",
+  "claim": {
+    "quantity_kg": 4750,
+    "period_days": 1,
+    "date": "2026-09-22",
+    "certificate_id": "EPR-CERT-2026-0006"
+  },
+  "evidence": [
+    "epr_certificate.png",
+    "invoice.png",
+    "weighbridge.png",
+    "transporter.png",
+    "gps.csv",
+    "photo.jpg"
+  ],
+  "expected_verdict": "HIGH",
+  "expected_flags": [
+    "pattern"
+  ]
+}

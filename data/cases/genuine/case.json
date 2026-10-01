@@ -1,0 +1,24 @@
+{
+  "number": 1,
+  "case_id": "genuine",
+  "title": "Genuine claim \u2014 all evidence consistent",
+  "scenario": "Claim 2,000 kg; invoice 2,000; weighbridge 1,980 (1%); GPS consistent; photo has EXIF",
+  "recycler_reg_no": "R001",
+  "producer": "Aster Consumer Electronics Ltd",
+  "claim": {
+    "quantity_kg": 2000,
+    "period_days": 1,
+    "date": "2026-09-10",
+    "certificate_id": "EPR-CERT-2026-0001"
+  },
+  "evidence": [
+    "epr_certificate.png",
+    "invoice.png",
+    "weighbridge.png",
+    "transporter.png",
+    "gps.csv",
+    "photo.jpg"
+  ],
+  "expected_verdict": "LOW",
+  "expected_flags": []
+}

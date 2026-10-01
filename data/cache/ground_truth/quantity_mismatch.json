@@ -1,0 +1,50 @@
+{
+  "epr_certificate": {
+    "doc_type": "epr_certificate",
+    "recycler_name": "Urban Mine Processing Ltd",
+    "recycler_reg_no": "R004",
+    "quantity_kg": 10000.0,
+    "date": "2026-09-16",
+    "time": null,
+    "vehicle_no": null,
+    "certificate_id": "EPR-CERT-2026-0003",
+    "suspicious_content": false,
+    "suspicious_excerpt": null
+  },
+  "invoice": {
+    "doc_type": "invoice",
+    "recycler_name": "Urban Mine Processing Ltd",
+    "recycler_reg_no": "R004",
+    "quantity_kg": 10000.0,
+    "date": "2026-09-16",
+    "time": null,
+    "vehicle_no": null,
+    "certificate_id": "EPR-CERT-2026-0003",
+    "suspicious_content": false,
+    "suspicious_excerpt": null
+  },
+  "weighbridge": {
+    "doc_type": "weighbridge",
+    "recycler_name": "Urban Mine Processing Ltd",
+    "recycler_reg_no": "R004",
+    "quantity_kg": 7200.0,
+    "date": "2026-09-16",
+    "time": "11:20",
+    "vehicle_no": "TN09EF3302",
+    "certificate_id": null,
+    "suspicious_content": false,
+    "suspicious_excerpt": null
+  },
+  "transporter": {
+    "doc_type": "transporter",
+    "recycler_name": "Urban Mine Processing Ltd",
+    "recycler_reg_no": "R004",
+    "quantity_kg": 7200.0,
+    "date": "2026-09-16",
+    "time": "11:10",
+    "vehicle_no": "TN09EF3302",
+    "certificate_id": null,
+    "suspicious_content": false,
+    "suspicious_excerpt": null
+  }
+}

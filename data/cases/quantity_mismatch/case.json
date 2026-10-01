@@ -1,0 +1,24 @@
+{
+  "number": 3,
+  "case_id": "quantity_mismatch",
+  "title": "Quantity mismatch \u2014 certificate and invoice inflated",
+  "scenario": "Certificate & invoice 10,000; weighbridge 7,200; transporter doc 7,200 \u2192 invoice/certificate inflated",
+  "recycler_reg_no": "R004",
+  "producer": "Aster Consumer Electronics Ltd",
+  "claim": {
+    "quantity_kg": 10000,
+    "period_days": 1,
+    "date": "2026-09-16",
+    "certificate_id": "EPR-CERT-2026-0003"
+  },
+  "evidence": [
+    "epr_certificate.png",
+    "invoice.png",
+    "weighbridge.png",
+    "transporter.png",
+    "gps.csv",
+    "photo.jpg"
+  ],
+  "expected_verdict": "HIGH",
+  "expected_flags": []
+}

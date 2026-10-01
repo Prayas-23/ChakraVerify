@@ -1,0 +1,24 @@
+{
+  "number": 5,
+  "case_id": "timeline",
+  "title": "Impossible timeline \u2014 truck 150 km away at delivery",
+  "scenario": "Delivery receipt 14:00; GPS shows truck ~150 km from facility at 14:00",
+  "recycler_reg_no": "R006",
+  "producer": "Aster Consumer Electronics Ltd",
+  "claim": {
+    "quantity_kg": 4000,
+    "period_days": 1,
+    "date": "2026-09-20",
+    "certificate_id": "EPR-CERT-2026-0005"
+  },
+  "evidence": [
+    "epr_certificate.png",
+    "invoice.png",
+    "weighbridge.png",
+    "transporter.png",
+    "gps.csv",
+    "photo.jpg"
+  ],
+  "expected_verdict": "HIGH",
+  "expected_flags": []
+}

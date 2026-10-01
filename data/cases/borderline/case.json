@@ -1,0 +1,24 @@
+{
+  "number": 2,
+  "case_id": "borderline",
+  "title": "Borderline claim \u2014 90% capacity, 1.5% weight difference",
+  "scenario": "Claim 9,000 kg over 4 days (90% of capacity); weighbridge 8,865 (1.5%); all consistent",
+  "recycler_reg_no": "R002",
+  "producer": "Aster Consumer Electronics Ltd",
+  "claim": {
+    "quantity_kg": 9000,
+    "period_days": 4,
+    "date": "2026-09-14",
+    "certificate_id": "EPR-CERT-2026-0002"
+  },
+  "evidence": [
+    "epr_certificate.png",
+    "invoice.png",
+    "weighbridge.png",
+    "transporter.png",
+    "gps.csv",
+    "photo.jpg"
+  ],
+  "expected_verdict": "LOW",
+  "expected_flags": []
+}

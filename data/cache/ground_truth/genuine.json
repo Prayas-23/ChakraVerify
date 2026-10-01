@@ -1,0 +1,50 @@
+{
+  "epr_certificate": {
+    "doc_type": "epr_certificate",
+    "recycler_name": "EcoLoop Recyclers Pvt Ltd",
+    "recycler_reg_no": "R001",
+    "quantity_kg": 2000.0,
+    "date": "2026-09-10",
+    "time": null,
+    "vehicle_no": null,
+    "certificate_id": "EPR-CERT-2026-0001",
+    "suspicious_content": false,
+    "suspicious_excerpt": null
+  },
+  "invoice": {
+    "doc_type": "invoice",
+    "recycler_name": "EcoLoop Recyclers Pvt Ltd",
+    "recycler_reg_no": "R001",
+    "quantity_kg": 2000.0,
+    "date": "2026-09-10",
+    "time": null,
+    "vehicle_no": null,
+    "certificate_id": "EPR-CERT-2026-0001",
+    "suspicious_content": false,
+    "suspicious_excerpt": null
+  },
+  "weighbridge": {
+    "doc_type": "weighbridge",
+    "recycler_name": "EcoLoop Recyclers Pvt Ltd",
+    "recycler_reg_no": "R001",
+    "quantity_kg": 1980.0,
+    "date": "2026-09-10",
+    "time": "10:20",
+    "vehicle_no": "OD02AB4521",
+    "certificate_id": null,
+    "suspicious_content": false,
+    "suspicious_excerpt": null
+  },
+  "transporter": {
+    "doc_type": "transporter",
+    "recycler_name": "EcoLoop Recyclers Pvt Ltd",
+    "recycler_reg_no": "R001",
+    "quantity_kg": 1980.0,
+    "date": "2026-09-10",
+    "time": "10:10",
+    "vehicle_no": "OD02AB4521",
+    "certificate_id": null,
+    "suspicious_content": false,
+    "suspicious_excerpt": null
+  }
+}
